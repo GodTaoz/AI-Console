@@ -27,9 +27,9 @@ const messages = {
       language: '语言',
     },
     shell: {
-      navigation: '路由导航',
-      phase: 'Phase 1',
-      phaseDescription: 'AppShell、路由与空状态骨架已接入',
+      navigation: '导航',
+      phase: 'Live Ops',
+      phaseDescription: '7 个核心服务 · 真实采集在线',
       topbarEyebrow: 'Command Center',
       topbarHint: '清萝正在守望 ThinkPad、Docker、NAS 与 AI 额度状态',
       pageHeaderEyebrow: 'AI Ops Console',
@@ -195,8 +195,8 @@ const messages = {
     },
     shell: {
       navigation: 'Navigation',
-      phase: 'Phase 1',
-      phaseDescription: 'AppShell, routing, and empty-state scaffolding are wired up',
+      phase: 'Live Ops',
+      phaseDescription: '7 core services · live collectors online',
       topbarEyebrow: 'Command Center',
       topbarHint: 'Qingluo is watching ThinkPad, Docker, NAS, and AI quota signals',
       pageHeaderEyebrow: 'AI Ops Console',

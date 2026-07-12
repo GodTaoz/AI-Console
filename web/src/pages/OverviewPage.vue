@@ -43,6 +43,16 @@ const coreContainers = computed(() => {
   return docker.value?.containers.filter((container) => coreNames.has(container.name)) ?? []
 })
 
+const healthyCoreCount = computed(() => coreContainers.value.filter((container) => container.status === 'ok').length)
+const quotaAccountCount = computed(() => aiQuota.value?.accounts.length ?? 0)
+const storageVolumeCount = computed(() => resources.value?.filesystems.length ?? 0)
+
+const commandSummary = computed(() => [
+  { label: '核心服务', value: `${healthyCoreCount.value}/${coreContainers.value.length || 7}` },
+  { label: '存储卷', value: String(storageVolumeCount.value || '—') },
+  { label: 'AI 额度池', value: String(quotaAccountCount.value || '—') },
+])
+
 const allIssues = computed(() => [
   ...(resources.value?.issues ?? []).map((issue) => issue.message),
   ...(docker.value?.issues ?? []).map((issue) => issue.message),
@@ -135,13 +145,21 @@ onMounted(() => {
           <div class="overview-hero__kicker">Live Overview</div>
           <h2 class="overview-hero__title">{{ statusText }}</h2>
           <p class="overview-hero__copy">
-            直接读取当前 FastAPI MVP 接口：服务器资源、Docker 服务、CPA/Codex 额度与 latest summary。
+            本地采集器已连接，正在守望主机资源、Docker 编队、NAS 存储与 Codex 额度池。
           </p>
         </div>
 
         <div class="overview-hero__status">
-          <NTag round :type="statusTagType(overallStatus)">{{ overallStatus }}</NTag>
-          <span class="overview-hero__time">{{ lastUpdatedAt || '尚未刷新' }}</span>
+          <div class="overview-hero__status-row">
+            <NTag round :type="statusTagType(overallStatus)">{{ overallStatus }}</NTag>
+            <span class="overview-hero__time">{{ lastUpdatedAt || '尚未刷新' }}</span>
+          </div>
+          <div class="overview-hero__summary">
+            <article v-for="item in commandSummary" :key="item.label" class="overview-hero__summary-item">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </article>
+          </div>
           <NButton :loading="loadState === 'loading'" strong type="primary" @click="loadDashboard({ collectFirst: true })">
             刷新采集
           </NButton>
