@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NDivider, NIcon, NSelect, NSpace, NSwitch } from 'naive-ui'
+import { NIcon, NSelect, NSpace, NSwitch } from 'naive-ui'
 import { LanguageOutline, MoonOutline, SunnyOutline } from '@vicons/ionicons5'
 
 import { language, setLanguage, setTheme, theme } from '@/stores/ui'
@@ -36,7 +36,7 @@ const languageOptions = computed(() => [
           />
         </div>
 
-        <NDivider vertical />
+        <div class="topbar__divider" />
 
         <div class="topbar__control">
           <n-icon size="18">
@@ -52,9 +52,6 @@ const languageOptions = computed(() => [
           />
         </div>
 
-        <NButton secondary strong size="small" @click="setTheme(isDark ? 'light' : 'dark')">
-          {{ isDark ? t('theme.light') : t('theme.dark') }}
-        </NButton>
       </NSpace>
     </div>
   </header>

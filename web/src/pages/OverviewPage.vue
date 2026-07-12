@@ -101,6 +101,19 @@ function statusTagType(status: ApiStatus | null | undefined) {
   return 'default'
 }
 
+function statusLabel(status: ApiStatus | string | null | undefined) {
+  if (status === 'ok') return '正常'
+  if (status === 'warning') return '关注'
+  if (status === 'critical') return '异常'
+  if (status === 'unsupported') return '不支持'
+  if (status === 'permission_denied') return '无权限'
+  if (status === 'running') return '运行中'
+  if (status === 'healthy') return '健康'
+  if (status === 'online') return '在线'
+  if (!status || status === 'unknown') return '未知'
+  return String(status)
+}
+
 function asErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
@@ -170,7 +183,7 @@ onMounted(() => {
 
         <div class="overview-hero__status">
           <div class="overview-hero__status-row">
-            <NTag round :type="statusTagType(overallStatus)">{{ overallStatus }}</NTag>
+            <NTag round :type="statusTagType(overallStatus)">{{ statusLabel(overallStatus) }}</NTag>
             <span class="overview-hero__time">{{ lastUpdatedAt || '尚未刷新' }}</span>
           </div>
           <div class="overview-hero__summary">
@@ -192,7 +205,7 @@ onMounted(() => {
           <div class="overview-section-card__eyebrow">Host</div>
           <h3>服务器资源</h3>
           <p>ThinkPad 节点运行状态、内存、温度与电源健康。</p>
-          <NTag size="small" :type="statusTagType(resources?.status)">{{ resources?.status ?? 'unknown' }}</NTag>
+          <NTag size="small" :type="statusTagType(resources?.status)">{{ statusLabel(resources?.status) }}</NTag>
         </div>
         <div class="overview-section-card__body overview-resource-grid">
           <article class="overview-kpi overview-kpi--primary">
@@ -216,7 +229,7 @@ onMounted(() => {
           <div class="overview-section-card__eyebrow">Storage</div>
           <h3>存储</h3>
           <p>本地根分区与 NAS 挂载容量，保持低水位预警。</p>
-          <NTag size="small" :type="statusTagType(rootFilesystem?.status ?? nasFilesystem?.status)">online</NTag>
+          <NTag size="small" :type="statusTagType(rootFilesystem?.status ?? nasFilesystem?.status)">在线</NTag>
         </div>
         <div class="overview-section-card__body overview-storage-list">
           <article class="overview-storage-row">
@@ -243,7 +256,7 @@ onMounted(() => {
           <div class="overview-section-card__eyebrow">AI Quota</div>
           <h3>AI 额度</h3>
           <p>Codex 额度池使用率、剩余额度与重置倒计时。</p>
-          <NTag size="small" :type="statusTagType(aiQuota?.status)">{{ aiQuota?.status ?? 'unknown' }}</NTag>
+          <NTag size="small" :type="statusTagType(aiQuota?.status)">{{ statusLabel(aiQuota?.status) }}</NTag>
         </div>
         <div class="overview-section-card__body overview-quota-list">
           <article v-for="account in aiQuota?.accounts ?? []" :key="account.id" class="overview-quota-row">
@@ -267,13 +280,13 @@ onMounted(() => {
           <div class="overview-section-card__eyebrow">Docker</div>
           <h3>Docker 编队</h3>
           <p>核心服务健康巡检，异常会进入清萝建议。</p>
-          <NTag size="small" :type="statusTagType(docker?.status)">{{ docker?.status ?? 'unknown' }}</NTag>
+          <NTag size="small" :type="statusTagType(docker?.status)">{{ statusLabel(docker?.status) }}</NTag>
         </div>
         <div class="overview-section-card__body overview-service-grid">
           <article v-for="container in coreContainers" :key="container.name" class="overview-service-row">
             <span class="overview-service-row__dot" />
             <strong>{{ container.name }}</strong>
-            <NTag size="small" :type="statusTagType(container.status)">{{ container.health ?? container.status }}</NTag>
+            <NTag size="small" :type="statusTagType(container.status)">{{ statusLabel(container.health ?? container.status) }}</NTag>
           </article>
         </div>
       </NCard>

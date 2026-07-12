@@ -1030,3 +1030,38 @@ body::before {
     width: 12px;
   }
 }
+
+/* Codex review implementation: Chinese status system + cockpit controls */
+.topbar__divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 22px;
+  background: var(--panel-border);
+}
+
+.topbar__controls {
+  box-shadow: 0 18px 46px rgba(4, 10, 24, 0.16);
+}
+
+.page-header--overview {
+  padding: 14px 0 8px;
+}
+
+.page-header--overview .page-header__eyebrow {
+  color: var(--text-soft);
+}
+
+.page-header--overview .page-header__title {
+  font-size: clamp(24px, 3vw, 40px);
+}
+
+.page-header--overview .page-header__description {
+  max-width: 620px;
+}
+
+.overview-section-card__meta .n-tag,
+.overview-hero__status-row .n-tag,
+.overview-service-row .n-tag {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}

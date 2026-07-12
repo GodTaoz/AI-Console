@@ -13,7 +13,7 @@ const statusLabel = computed(() => t(currentRoute.value.statusKey ?? 'shell.rout
 </script>
 
 <template>
-  <section class="page-header">
+  <section :class="['page-header', { 'page-header--overview': currentRoute.name === 'overview' }]">
     <div class="page-header__copy">
       <div class="page-header__eyebrow">{{ t('shell.pageHeaderEyebrow') }}</div>
       <h2 class="page-header__title">{{ title }}</h2>
