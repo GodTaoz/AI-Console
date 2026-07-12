@@ -51,7 +51,8 @@ const allIssues = computed(() => [
 ].filter(Boolean))
 
 const overallStatus = computed<ApiStatus>(() => {
-  const statuses = [summary.value?.status, resources.value?.status, docker.value?.status, aiQuota.value?.status].filter(Boolean) as ApiStatus[]
+  const liveStatuses = [resources.value?.status, docker.value?.status, aiQuota.value?.status].filter(Boolean) as ApiStatus[]
+  const statuses = liveStatuses.length ? liveStatuses : ([summary.value?.status].filter(Boolean) as ApiStatus[])
   if (statuses.includes('critical')) return 'critical'
   if (statuses.includes('warning')) return 'warning'
   if (statuses.includes('unknown')) return 'unknown'

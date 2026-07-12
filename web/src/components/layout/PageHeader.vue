@@ -9,6 +9,7 @@ const { t } = useI18n()
 
 const title = computed(() => t(currentRoute.value.titleKey))
 const description = computed(() => t(currentRoute.value.descriptionKey))
+const statusLabel = computed(() => t(currentRoute.value.statusKey ?? 'shell.routeSkeleton'))
 </script>
 
 <template>
@@ -21,7 +22,7 @@ const description = computed(() => t(currentRoute.value.descriptionKey))
 
     <div class="page-header__meta">
       <NTag round type="info">{{ currentRoute.path }}</NTag>
-      <NTag round type="warning">{{ t('shell.routeSkeleton') }}</NTag>
+      <NTag round :type="currentRoute.statusKey ? 'success' : 'warning'">{{ statusLabel }}</NTag>
     </div>
   </section>
 </template>

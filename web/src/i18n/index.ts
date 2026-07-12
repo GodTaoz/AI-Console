@@ -34,6 +34,7 @@ const messages = {
       topbarHint: '主题与语言仍由现有 store 驱动',
       pageHeaderEyebrow: '页面骨架',
       routeSkeleton: 'Pending data',
+      liveData: 'Live data',
     },
     theme: {
       light: '浅色模式',
@@ -47,6 +48,7 @@ const messages = {
       overview: {
         title: '总览',
         description: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
+        liveDescription: '实时读取服务器资源、Docker 服务、AI 额度与 latest summary 的总览页面。',
         kicker: '总览',
         intro: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
         sections: {
@@ -199,6 +201,7 @@ const messages = {
       topbarHint: 'Theme and language still flow through the existing stores',
       pageHeaderEyebrow: 'Page skeleton',
       routeSkeleton: 'Pending data',
+      liveData: 'Live data',
     },
     theme: {
       light: 'Light mode',
@@ -212,6 +215,7 @@ const messages = {
       overview: {
         title: 'Overview',
         description: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
+        liveDescription: 'Live overview for host resources, Docker services, AI quota, and latest summary data.',
         kicker: 'Overview',
         intro: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
         sections: {

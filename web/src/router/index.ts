@@ -24,6 +24,7 @@ export interface AppRoute {
   path: string
   titleKey: string
   descriptionKey: string
+  statusKey?: string
   component: Component
 }
 
@@ -32,7 +33,8 @@ export const appRoutes: AppRoute[] = [
     name: 'overview',
     path: '/overview',
     titleKey: 'pages.overview.title',
-    descriptionKey: 'pages.overview.description',
+    descriptionKey: 'pages.overview.liveDescription',
+    statusKey: 'shell.liveData',
     component: OverviewPage,
   },
   {
