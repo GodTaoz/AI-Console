@@ -53,12 +53,22 @@ const commandSummary = computed(() => [
   { label: 'AI 额度池', value: String(quotaAccountCount.value || '—') },
 ])
 
-const allIssues = computed(() => [
-  ...(resources.value?.issues ?? []).map((issue) => issue.message),
-  ...(docker.value?.issues ?? []).map((issue) => issue.message),
-  ...(aiQuota.value?.issues ?? []).map((issue) => issue.message),
-  ...Object.values(errors.value),
-].filter(Boolean))
+function productizeIssue(message: string) {
+  if (/fetch quota/i.test(message) || /TimeoutError/i.test(message)) {
+    return 'AI 额度池部分账号本次采集超时，稍后可点击刷新采集重试。'
+  }
+
+  return message
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[account]')
+    .replace(/codex-[^\s:]+\.json/gi, 'Codex account')
+}
+
+const allIssues = computed(() => Array.from(new Set([
+  ...(resources.value?.issues ?? []).map((issue) => productizeIssue(issue.message)),
+  ...(docker.value?.issues ?? []).map((issue) => productizeIssue(issue.message)),
+  ...(aiQuota.value?.issues ?? []).map((issue) => productizeIssue(issue.message)),
+  ...Object.values(errors.value).map((issue) => productizeIssue(issue)),
+].filter(Boolean))))
 
 const overallStatus = computed<ApiStatus>(() => {
   const liveStatuses = [resources.value?.status, docker.value?.status, aiQuota.value?.status].filter(Boolean) as ApiStatus[]
