@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NIcon, NSelect, NSpace, NSwitch } from 'naive-ui'
-import { LanguageOutline, MoonOutline, SunnyOutline } from '@vicons/ionicons5'
+import { NButton, NIcon, NSpace, NSwitch } from 'naive-ui'
+import { MenuOutline, MoonOutline, SunnyOutline } from '@vicons/ionicons5'
 
-import { language, setLanguage, setTheme, theme } from '@/stores/ui'
+import { language, setLanguage, setTheme, theme, toggleSidebar } from '@/stores/ui'
 
 const { t } = useI18n()
 
 const isDark = computed(() => theme.value === 'dark')
-const languageOptions = computed(() => [
-  { label: '简体中文', value: 'zh-CN' },
-  { label: 'English', value: 'en-US' },
-])
+const languageLabel = computed(() => (language.value === 'zh-CN' ? '中' : 'EN'))
 </script>
 
 <template>
@@ -24,6 +21,12 @@ const languageOptions = computed(() => [
 
     <div class="topbar__controls">
       <NSpace align="center" size="small">
+        <NButton quaternary circle size="small" title="隐藏/显示菜单" @click="toggleSidebar">
+          <template #icon>
+            <n-icon><MenuOutline /></n-icon>
+          </template>
+        </NButton>
+
         <div class="topbar__control">
           <n-icon size="18">
             <component :is="isDark ? MoonOutline : SunnyOutline" />
@@ -38,19 +41,9 @@ const languageOptions = computed(() => [
 
         <div class="topbar__divider" />
 
-        <div class="topbar__control">
-          <n-icon size="18">
-            <LanguageOutline />
-          </n-icon>
-          <span>{{ t('controls.language') }}</span>
-          <NSelect
-            :value="language"
-            :options="languageOptions"
-            class="topbar__language"
-            size="small"
-            @update:value="(value) => setLanguage(value as 'zh-CN' | 'en-US')"
-          />
-        </div>
+        <button class="topbar__language-toggle" type="button" @click="setLanguage(language === 'zh-CN' ? 'en-US' : 'zh-CN')">
+          {{ languageLabel }}
+        </button>
 
       </NSpace>
     </div>

@@ -27,6 +27,7 @@ function detectPreferredTheme(): ThemeMode {
 
 export const theme = ref<ThemeMode>(getStoredValue(THEME_KEY, detectPreferredTheme()))
 export const language = ref<LanguageMode>(getStoredValue(LANGUAGE_KEY, 'zh-CN'))
+export const sidebarCollapsed = ref(false)
 
 export const isDarkTheme = computed(() => theme.value === 'dark')
 
@@ -40,6 +41,10 @@ export function toggleTheme() {
 
 export function setLanguage(next: LanguageMode) {
   language.value = next
+}
+
+export function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
 watch(
