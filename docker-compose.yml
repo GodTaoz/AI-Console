@@ -1,0 +1,39 @@
+services:
+  qingluo-console:
+    build: .
+    container_name: qingluo-console
+    restart: unless-stopped
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8010:8010"
+    volumes:
+      - ./data:/data
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /mnt/nas:/mnt/nas:ro
+      - /mnt/nas/qingluo/tools/network-status.json:/mnt/nas/qingluo/tools/network-status.json:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+      - cpa_default
+    environment:
+      QINGLUO_CONSOLE_DB: /data/qingluo-console.sqlite3
+      QINGLUO_PROC_ROOT: /host/proc
+      QINGLUO_SYS_ROOT: /host/sys
+      QINGLUO_NETWORK_STATUS_PATH: /mnt/nas/qingluo/tools/network-status.json
+      QINGLUO_PRIMARY_INTERFACE: enp4s0
+      QINGLUO_DOCKER_SOCKET: /var/run/docker.sock
+      QINGLUO_CORE_CONTAINERS: hindsight,cli-proxy-api,mysql,redis,filebrowser-nas-root,webdav-nas-root,qingluo-console
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  cpa_default:
+    external: true

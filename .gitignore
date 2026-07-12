@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+# Runtime data and secrets
+.env
+.env.*
+!.env.example
+data/
+*.sqlite3
+*.db
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+src/qingluo_console/static/assets/
+src/qingluo_console/static/index.html
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
