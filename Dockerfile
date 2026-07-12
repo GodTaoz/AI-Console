@@ -17,7 +17,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock* ./
 COPY src ./src
 COPY --from=web-build /app/src/qingluo_console/static ./src/qingluo_console/static
-RUN pip install --no-cache-dir uv && \
+RUN pip install --no-cache-dir --retries 5 --timeout 120 uv && \
     uv pip install --system .
 
 EXPOSE 8010
