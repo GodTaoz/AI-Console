@@ -21,8 +21,7 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-    @app.get("/")
-    def dashboard():
+    def frontend_index_response():
         index_html = static_dir / "index.html"
         if index_html.is_file():
             return FileResponse(index_html, media_type="text/html")
@@ -44,6 +43,10 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
 </html>""",
             status_code=503,
         )
+
+    @app.get("/")
+    def dashboard():
+        return frontend_index_response()
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -104,6 +107,10 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
         else:
             status = "ok" if statuses else "unknown"
         return {"status": status, "modules": modules}
+
+    @app.get("/{frontend_path:path}", include_in_schema=False)
+    def frontend_fallback(frontend_path: str):
+        return frontend_index_response()
 
     return app
 
