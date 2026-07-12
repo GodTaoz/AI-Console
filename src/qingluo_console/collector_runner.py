@@ -39,7 +39,7 @@ def _core_container_names() -> list[str]:
         name.strip()
         for name in os.getenv(
             "QINGLUO_CORE_CONTAINERS",
-            "hindsight,cli-proxy-api,mysql,redis,filebrowser-nas-root,webdav-nas-root,qingluo-console",
+            "hindsight,cli-proxy-api,mysql,redis,filebrowser-nas-root,webdav-nas-root,ai-console",
         ).split(",")
         if name.strip()
     ]
@@ -65,7 +65,7 @@ def collect_all_snapshots() -> dict[str, Any]:
 
 
 def run_collectors_once(*, db_path: str | Path | None = None) -> dict[str, object]:
-    target_db = Path(db_path or os.getenv("QINGLUO_CONSOLE_DB", "/data/qingluo-console.sqlite3"))
+    target_db = Path(db_path or os.getenv("QINGLUO_CONSOLE_DB", "/data/ai-console.sqlite3"))
     snapshots = collect_all_snapshots()
     modules: dict[str, dict[str, object]] = {}
     statuses: list[ModuleStatus] = []

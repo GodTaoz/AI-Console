@@ -8,7 +8,7 @@ def test_root_serves_dashboard_html():
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "清萝基础设施控制台" in response.text
+    assert "AI-Console" in response.text
     assert "data-testid=\"summary-card\"" in response.text
     assert "getJson('/api/summary')" in response.text
     assert "getJson('/api/resources')" in response.text

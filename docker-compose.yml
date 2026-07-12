@@ -1,7 +1,7 @@
 services:
-  qingluo-console:
+  ai-console:
     build: .
-    container_name: qingluo-console
+    container_name: ai-console
     restart: unless-stopped
     env_file:
       - .env
@@ -20,13 +20,13 @@ services:
       - default
       - cpa_default
     environment:
-      QINGLUO_CONSOLE_DB: /data/qingluo-console.sqlite3
+      QINGLUO_CONSOLE_DB: /data/ai-console.sqlite3
       QINGLUO_PROC_ROOT: /host/proc
       QINGLUO_SYS_ROOT: /host/sys
       QINGLUO_NETWORK_STATUS_PATH: /mnt/nas/qingluo/tools/network-status.json
       QINGLUO_PRIMARY_INTERFACE: enp4s0
       QINGLUO_DOCKER_SOCKET: /var/run/docker.sock
-      QINGLUO_CORE_CONTAINERS: hindsight,cli-proxy-api,mysql,redis,filebrowser-nas-root,webdav-nas-root,qingluo-console
+      QINGLUO_CORE_CONTAINERS: hindsight,cli-proxy-api,mysql,redis,filebrowser-nas-root,webdav-nas-root,ai-console
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=3).read()"]
       interval: 30s

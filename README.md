@@ -1,6 +1,6 @@
-# 清萝基础设施控制台
+# AI-Console
 
-个人基础设施状态总览服务，目标部署在 ThinkPad 本机，仅监听 loopback。
+服务器、容器、智能体与 AI 服务统一监控控制台。当前目标部署在 ThinkPad 本机，仅监听 loopback。
 
 ## 当前阶段
 

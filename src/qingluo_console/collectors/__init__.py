@@ -1,1 +1,1 @@
-"""Collectors for Qingluo Console."""
+"""Collectors for AI-Console."""

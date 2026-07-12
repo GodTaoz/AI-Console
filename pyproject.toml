@@ -1,7 +1,7 @@
 [project]
-name = "qingluo-console"
+name = "ai-console"
 version = "0.1.0"
-description = "Qingluo personal infrastructure console"
+description = "Unified dashboard for infrastructure and AI services"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",

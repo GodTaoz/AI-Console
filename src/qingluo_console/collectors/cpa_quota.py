@@ -157,7 +157,7 @@ def _api_call_payload(auth_index: str) -> dict[str, Any]:
         "header": {
             "Authorization": "Bearer $TOKEN$",
             "Content-Type": "application/json",
-            "User-Agent": "codex_cli_rs/qingluo-console",
+            "User-Agent": "codex_cli_rs/ai-console",
         },
     }
 

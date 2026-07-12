@@ -11,5 +11,5 @@ def test_health_endpoint_reports_service_identity():
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",
-        "service": "qingluo-console",
+        "service": "ai-console",
     }
