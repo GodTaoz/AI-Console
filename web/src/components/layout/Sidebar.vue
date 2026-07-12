@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NIcon, NLayoutSider, NTag } from 'naive-ui'
+import { NIcon, NLayoutSider, NTag } from 'naive-ui'
 import {
   AnalyticsOutline,
   CloudOutline,
@@ -52,22 +52,21 @@ function isActive(path: string) {
       <section class="sidebar__nav">
         <div class="sidebar__section-label">{{ t('shell.navigation') }}</div>
         <div class="sidebar__items">
-          <NButton
+          <button
             v-for="route in navRoutes"
             :key="route.path"
-            :quaternary="!isActive(route.path)"
-            :secondary="isActive(route.path)"
-            :strong="isActive(route.path)"
-            class="sidebar__item"
+            :class="['sidebar__item', { 'sidebar__item--active': isActive(route.path) }]"
+            type="button"
             @click="navigate(route.path)"
           >
-            <span class="sidebar__item-content">
+            <span class="sidebar__item-icon">
               <n-icon size="18">
                 <component :is="route.icon" />
               </n-icon>
-              <span class="sidebar__item-label">{{ route.label }}</span>
             </span>
-          </NButton>
+            <span class="sidebar__item-label">{{ route.label }}</span>
+            <span class="sidebar__item-glow" />
+          </button>
         </div>
       </section>
 
