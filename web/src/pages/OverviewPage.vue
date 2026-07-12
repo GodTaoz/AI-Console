@@ -279,7 +279,7 @@ onMounted(() => {
         <div class="overview-section-card__meta">
           <div class="overview-section-card__eyebrow">Docker</div>
           <h3>Docker 编队</h3>
-          <p>核心服务健康巡检，异常会进入清萝建议。</p>
+          <p>核心服务健康巡检，异常会进入智能建议。</p>
           <NTag size="small" :type="statusTagType(docker?.status)">{{ statusLabel(docker?.status) }}</NTag>
         </div>
         <div class="overview-section-card__body overview-service-grid">
