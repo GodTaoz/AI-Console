@@ -240,11 +240,13 @@ onMounted(() => {
           <article v-for="account in aiQuota?.accounts ?? []" :key="account.id" class="overview-quota-row">
             <div>
               <strong>{{ shortAccountName(account.name) }}</strong>
-              <p>已用 {{ formatPercent(account.used_percent) }} · 剩余 {{ formatPercent(account.remaining_percent) }}</p>
+              <p v-if="account.used_percent !== null">已用 {{ formatPercent(account.used_percent) }} · 剩余 {{ formatPercent(account.remaining_percent) }}</p>
+              <p v-else>本次采集超时，等待下次刷新。</p>
             </div>
             <div class="overview-quota-row__bar">
-              <NProgress type="line" :percentage="account.used_percent ?? 0" :show-indicator="false" status="success" />
-              <span>credits {{ account.reset_credits_available ?? '—' }} · {{ account.reset_after_seconds ?? '—' }}s 后重置</span>
+              <NProgress type="line" :percentage="account.used_percent ?? 0" :show-indicator="false" :status="account.used_percent === null ? 'warning' : 'success'" />
+              <span v-if="account.reset_credits_available !== null">剩余额度 {{ account.reset_credits_available }} · {{ account.reset_after_seconds ?? '—' }} 秒后重置</span>
+              <span v-else>额度明细暂不可用</span>
             </div>
           </article>
           <p v-if="!aiQuota?.accounts?.length" class="overview-card__muted">暂无 AI 额度数据</p>

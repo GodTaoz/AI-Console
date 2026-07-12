@@ -48,7 +48,7 @@ const messages = {
       overview: {
         title: '总览',
         description: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
-        liveDescription: '实时读取服务器资源、Docker 服务、AI 额度与 latest summary 的总览页面。',
+        liveDescription: '实时汇总主机资源、Docker 服务、AI 额度与本地采集状态。',
         kicker: '总览',
         intro: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
         sections: {
@@ -215,7 +215,7 @@ const messages = {
       overview: {
         title: 'Overview',
         description: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
-        liveDescription: 'Live overview for host resources, Docker services, AI quota, and latest summary data.',
+        liveDescription: 'Live overview for host resources, Docker services, AI quota, and local collector status.',
         kicker: 'Overview',
         intro: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
         sections: {
