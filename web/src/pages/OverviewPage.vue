@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NButton, NCard, NGrid, NGridItem, NProgress, NSpace, NTag } from 'naive-ui'
+import { NButton, NCard, NProgress, NTag } from 'naive-ui'
 
 import { formatBytes, formatPercent, getAiQuota, getDocker, getResources, getSummary, runCollect, shortAccountName } from '@/api'
 import type { AiQuotaResponse, ApiStatus, DockerResponse, ResourcesResponse, SummaryResponse } from '@/types'
@@ -177,97 +177,96 @@ onMounted(() => {
       </div>
     </NCard>
 
-    <NGrid :cols="12" :x-gap="16" :y-gap="16" responsive="screen">
-      <NGridItem :span="3">
-        <NCard class="overview-card" bordered>
-          <template #header>服务器资源</template>
-          <NSpace vertical size="small">
-            <div class="overview-metric">
-              <span>状态</span>
-              <NTag size="small" :type="statusTagType(resources?.status)">{{ resources?.status ?? 'unknown' }}</NTag>
-            </div>
-            <div class="overview-metric">
-              <span>内存</span>
-              <strong>{{ formatPercent(memoryUsedPercent) }}</strong>
-            </div>
+    <div class="overview-sections">
+      <NCard class="overview-card overview-section-card" bordered>
+        <div class="overview-section-card__meta">
+          <div class="overview-section-card__eyebrow">Host</div>
+          <h3>服务器资源</h3>
+          <p>ThinkPad 节点运行状态、内存、温度与电源健康。</p>
+          <NTag size="small" :type="statusTagType(resources?.status)">{{ resources?.status ?? 'unknown' }}</NTag>
+        </div>
+        <div class="overview-section-card__body overview-resource-grid">
+          <article class="overview-kpi overview-kpi--primary">
+            <span>内存占用</span>
+            <strong>{{ formatPercent(memoryUsedPercent) }}</strong>
             <NProgress type="line" :percentage="memoryUsedPercent ?? 0" :show-indicator="false" status="success" />
-            <div class="overview-metric">
-              <span>最高温度</span>
-              <strong>{{ hottestTemperature === null ? '—' : `${hottestTemperature.toFixed(1)} ℃` }}</strong>
-            </div>
-            <div class="overview-metric">
-              <span>电池</span>
-              <strong>{{ formatPercent(resources?.power.battery_percent, 0) }}</strong>
-            </div>
-          </NSpace>
-        </NCard>
-      </NGridItem>
+          </article>
+          <article class="overview-kpi">
+            <span>最高温度</span>
+            <strong>{{ hottestTemperature === null ? '—' : `${hottestTemperature.toFixed(1)} ℃` }}</strong>
+          </article>
+          <article class="overview-kpi">
+            <span>电池</span>
+            <strong>{{ formatPercent(resources?.power.battery_percent, 0) }}</strong>
+          </article>
+        </div>
+      </NCard>
 
-      <NGridItem :span="3">
-        <NCard class="overview-card" bordered>
-          <template #header>存储</template>
-          <NSpace vertical size="small">
-            <div class="overview-metric">
-              <span>/</span>
-              <strong>{{ formatPercent(rootUsedPercent) }}</strong>
+      <NCard class="overview-card overview-section-card" bordered>
+        <div class="overview-section-card__meta">
+          <div class="overview-section-card__eyebrow">Storage</div>
+          <h3>存储</h3>
+          <p>本地根分区与 NAS 挂载容量，保持低水位预警。</p>
+          <NTag size="small" :type="statusTagType(rootFilesystem?.status ?? nasFilesystem?.status)">online</NTag>
+        </div>
+        <div class="overview-section-card__body overview-storage-list">
+          <article class="overview-storage-row">
+            <div>
+              <strong>/</strong>
+              <p>{{ rootFilesystem ? `${formatBytes(rootFilesystem.used_bytes)} / ${formatBytes(rootFilesystem.total_bytes)}` : '暂无根分区数据' }}</p>
             </div>
+            <span>{{ formatPercent(rootUsedPercent) }}</span>
             <NProgress type="line" :percentage="rootUsedPercent ?? 0" :show-indicator="false" />
-            <p class="overview-card__muted">
-              {{ rootFilesystem ? `${formatBytes(rootFilesystem.used_bytes)} / ${formatBytes(rootFilesystem.total_bytes)}` : '暂无根分区数据' }}
-            </p>
-            <div class="overview-metric">
-              <span>/mnt/nas</span>
-              <strong>{{ formatPercent(nasUsedPercent) }}</strong>
+          </article>
+          <article class="overview-storage-row">
+            <div>
+              <strong>/mnt/nas</strong>
+              <p>{{ nasFilesystem ? `${formatBytes(nasFilesystem.used_bytes)} / ${formatBytes(nasFilesystem.total_bytes)}` : '暂无 NAS 数据' }}</p>
             </div>
+            <span>{{ formatPercent(nasUsedPercent) }}</span>
             <NProgress type="line" :percentage="nasUsedPercent ?? 0" :show-indicator="false" status="success" />
-            <p class="overview-card__muted">
-              {{ nasFilesystem ? `${formatBytes(nasFilesystem.used_bytes)} / ${formatBytes(nasFilesystem.total_bytes)}` : '暂无 NAS 数据' }}
-            </p>
-          </NSpace>
-        </NCard>
-      </NGridItem>
+          </article>
+        </div>
+      </NCard>
 
-      <NGridItem :span="3">
-        <NCard class="overview-card" bordered>
-          <template #header>AI 额度</template>
-          <NSpace vertical size="small">
-            <div class="overview-metric">
-              <span>状态</span>
-              <NTag size="small" :type="statusTagType(aiQuota?.status)">{{ aiQuota?.status ?? 'unknown' }}</NTag>
+      <NCard class="overview-card overview-section-card" bordered>
+        <div class="overview-section-card__meta">
+          <div class="overview-section-card__eyebrow">AI Quota</div>
+          <h3>AI 额度</h3>
+          <p>Codex 额度池使用率、剩余 credits 与重置倒计时。</p>
+          <NTag size="small" :type="statusTagType(aiQuota?.status)">{{ aiQuota?.status ?? 'unknown' }}</NTag>
+        </div>
+        <div class="overview-section-card__body overview-quota-list">
+          <article v-for="account in aiQuota?.accounts ?? []" :key="account.id" class="overview-quota-row">
+            <div>
+              <strong>{{ shortAccountName(account.name) }}</strong>
+              <p>已用 {{ formatPercent(account.used_percent) }} · 剩余 {{ formatPercent(account.remaining_percent) }}</p>
             </div>
-            <article v-for="account in aiQuota?.accounts ?? []" :key="account.id" class="overview-quota">
-              <div class="overview-metric">
-                <span>{{ shortAccountName(account.name) }}</span>
-                <strong>{{ formatPercent(account.used_percent) }}</strong>
-              </div>
+            <div class="overview-quota-row__bar">
               <NProgress type="line" :percentage="account.used_percent ?? 0" :show-indicator="false" status="success" />
-              <p class="overview-card__muted">credits {{ account.reset_credits_available ?? '—' }} · reset {{ account.reset_after_seconds ?? '—' }}s</p>
-            </article>
-            <p v-if="!aiQuota?.accounts?.length" class="overview-card__muted">暂无 AI 额度数据</p>
-          </NSpace>
-        </NCard>
-      </NGridItem>
+              <span>credits {{ account.reset_credits_available ?? '—' }} · {{ account.reset_after_seconds ?? '—' }}s 后重置</span>
+            </div>
+          </article>
+          <p v-if="!aiQuota?.accounts?.length" class="overview-card__muted">暂无 AI 额度数据</p>
+        </div>
+      </NCard>
 
-      <NGridItem :span="3">
-        <NCard class="overview-card" bordered>
-          <template #header>Docker 编队</template>
-          <NSpace vertical size="small">
-            <div class="overview-metric">
-              <span>状态</span>
-              <NTag size="small" :type="statusTagType(docker?.status)">{{ docker?.status ?? 'unknown' }}</NTag>
-            </div>
-            <div class="overview-metric">
-              <span>核心服务</span>
-              <strong>{{ coreContainers.length }}</strong>
-            </div>
-            <article v-for="container in coreContainers" :key="container.name" class="overview-service">
-              <span>{{ container.name }}</span>
-              <NTag size="small" :type="statusTagType(container.status)">{{ container.health ?? container.status }}</NTag>
-            </article>
-          </NSpace>
-        </NCard>
-      </NGridItem>
-    </NGrid>
+      <NCard class="overview-card overview-section-card" bordered>
+        <div class="overview-section-card__meta">
+          <div class="overview-section-card__eyebrow">Docker</div>
+          <h3>Docker 编队</h3>
+          <p>核心服务健康巡检，异常会进入清萝建议。</p>
+          <NTag size="small" :type="statusTagType(docker?.status)">{{ docker?.status ?? 'unknown' }}</NTag>
+        </div>
+        <div class="overview-section-card__body overview-service-grid">
+          <article v-for="container in coreContainers" :key="container.name" class="overview-service-row">
+            <span class="overview-service-row__dot" />
+            <strong>{{ container.name }}</strong>
+            <NTag size="small" :type="statusTagType(container.status)">{{ container.health ?? container.status }}</NTag>
+          </article>
+        </div>
+      </NCard>
+    </div>
 
     <NCard class="overview-advice" bordered>
       <template #header>清萝建议</template>
