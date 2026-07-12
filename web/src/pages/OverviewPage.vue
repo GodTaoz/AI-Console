@@ -157,6 +157,15 @@ onMounted(() => {
           <p class="overview-hero__copy">
             本地采集器已连接，正在守望主机资源、Docker 编队、NAS 存储与 Codex 额度池。
           </p>
+          <div class="overview-hero__chain" aria-label="采集链路">
+            <span>Local Collector</span>
+            <i />
+            <span>Host</span>
+            <i />
+            <span>Docker</span>
+            <i />
+            <span>AI Quota</span>
+          </div>
         </div>
 
         <div class="overview-hero__status">
@@ -233,7 +242,7 @@ onMounted(() => {
         <div class="overview-section-card__meta">
           <div class="overview-section-card__eyebrow">AI Quota</div>
           <h3>AI 额度</h3>
-          <p>Codex 额度池使用率、剩余 credits 与重置倒计时。</p>
+          <p>Codex 额度池使用率、剩余额度与重置倒计时。</p>
           <NTag size="small" :type="statusTagType(aiQuota?.status)">{{ aiQuota?.status ?? 'unknown' }}</NTag>
         </div>
         <div class="overview-section-card__body overview-quota-list">

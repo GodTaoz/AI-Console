@@ -991,3 +991,42 @@ body::before {
     gap: 14px;
   }
 }
+
+/* AI-Console hero collection chain */
+.overview-hero__chain {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 10px 12px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.overview-hero__chain span:first-child {
+  color: var(--text-strong);
+}
+
+.overview-hero__chain i {
+  width: 22px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+@media (max-width: 720px) {
+  .overview-hero__chain {
+    border-radius: 18px;
+  }
+
+  .overview-hero__chain i {
+    width: 12px;
+  }
+}
