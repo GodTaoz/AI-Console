@@ -1,0 +1,29 @@
+:root {
+  --font-sans: "Inter", "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --radius-xl: 24px;
+  --radius-lg: 18px;
+  --radius-md: 14px;
+  --shadow-panel: 0 30px 80px rgba(4, 10, 24, 0.28);
+}
+
+:root[data-theme='dark'] {
+  --page-bg: #06111f;
+  --page-bg-2: #08192d;
+  --panel-bg: rgba(9, 19, 35, 0.8);
+  --panel-border: rgba(148, 163, 184, 0.18);
+  --text-strong: #eff6ff;
+  --text-soft: rgba(226, 232, 240, 0.74);
+  --accent: #5fe4d4;
+  --accent-strong: #8ad7ff;
+}
+
+:root[data-theme='light'] {
+  --page-bg: #edf4fb;
+  --page-bg-2: #f7fafc;
+  --panel-bg: rgba(255, 255, 255, 0.82);
+  --panel-border: rgba(148, 163, 184, 0.26);
+  --text-strong: #102033;
+  --text-soft: rgba(16, 32, 51, 0.72);
+  --accent: #0ba6a6;
+  --accent-strong: #2d6cdf;
+}
