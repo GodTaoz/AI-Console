@@ -198,7 +198,7 @@ const messages = {
       phase: 'Live Ops',
       phaseDescription: '7 core services · live collectors online',
       topbarEyebrow: 'Command Center',
-      topbarHint: 'Qingluo is watching ThinkPad, Docker, NAS, and AI quota signals',
+      topbarHint: 'System is watching ThinkPad, Docker, NAS, and AI quota signals',
       pageHeaderEyebrow: 'AI Ops Console',
       routeSkeleton: 'Pending data',
       liveData: 'Live data',
