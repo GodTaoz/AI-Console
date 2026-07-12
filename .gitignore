@@ -18,6 +18,7 @@ data/
 web/node_modules/
 web/dist/
 web/.vite/
+src/qingluo_console/static/
 src/qingluo_console/static/assets/
 src/qingluo_console/static/index.html
 
