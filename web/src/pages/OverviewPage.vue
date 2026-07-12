@@ -293,8 +293,8 @@ onMounted(() => {
     </div>
 
     <NCard class="overview-advice" bordered>
-      <template #header>清萝建议</template>
-      <p v-if="!allIssues.length">暂无需要主人处理的问题。清萝会继续监控资源、Docker 服务和 AI 额度。</p>
+      <template #header>智能建议</template>
+      <p v-if="!allIssues.length">暂无需要处理的问题。系统会继续监控资源、Docker 服务和 AI 额度。</p>
       <ul v-else>
         <li v-for="issue in allIssues" :key="issue">{{ issue }}</li>
       </ul>

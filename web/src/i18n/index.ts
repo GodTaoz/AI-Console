@@ -31,7 +31,7 @@ const messages = {
       phase: '实时运行',
       phaseDescription: '7 个核心服务 · 采集链路在线',
       topbarEyebrow: '控制中枢',
-      topbarHint: '清萝正在守望 ThinkPad、Docker、NAS 与 AI 额度状态',
+      topbarHint: '系统正在守望 ThinkPad、Docker、NAS 与 AI 额度状态',
       pageHeaderEyebrow: '运维总览',
       routeSkeleton: '待接入',
       liveData: '实时数据',
