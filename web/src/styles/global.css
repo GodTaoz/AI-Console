@@ -161,6 +161,7 @@ a {
   align-items: center;
   gap: 10px;
   color: var(--text-soft);
+  white-space: nowrap;
 }
 
 .topbar__language {
