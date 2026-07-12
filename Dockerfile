@@ -1,3 +1,11 @@
+FROM node:22-slim AS web-build
+
+WORKDIR /app
+
+COPY web ./web
+
+RUN cd web && npm install && npm run build
+
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -7,6 +15,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock* ./
 COPY src ./src
+COPY --from=web-build /app/src/qingluo_console/static ./src/qingluo_console/static
 RUN pip install --no-cache-dir uv && \
     uv pip install --system .
 
