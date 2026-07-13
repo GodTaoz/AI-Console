@@ -42,6 +42,7 @@ export const appRoutes: AppRoute[] = [
     path: '/hosts',
     titleKey: 'pages.hosts.title',
     descriptionKey: 'pages.hosts.description',
+    statusKey: 'shell.liveData',
     component: HostsPage,
   },
   {
@@ -49,6 +50,7 @@ export const appRoutes: AppRoute[] = [
     path: '/containers',
     titleKey: 'pages.containers.title',
     descriptionKey: 'pages.containers.description',
+    statusKey: 'shell.liveData',
     component: ContainersPage,
   },
   {
@@ -63,6 +65,7 @@ export const appRoutes: AppRoute[] = [
     path: '/ai-services',
     titleKey: 'pages.aiServices.title',
     descriptionKey: 'pages.aiServices.description',
+    statusKey: 'shell.liveData',
     component: AiServicesPage,
   },
   {
@@ -70,6 +73,7 @@ export const appRoutes: AppRoute[] = [
     path: '/network-storage',
     titleKey: 'pages.networkStorage.title',
     descriptionKey: 'pages.networkStorage.description',
+    statusKey: 'shell.liveData',
     component: NetworkStoragePage,
   },
   {
@@ -105,7 +109,7 @@ export function resolveRoute(target: string) {
 }
 
 export function navigate(target: string | AppRouteName, replace = false) {
-  const route = target.startsWith('/') ? resolveRoute(target) : routeByName.get(target) ?? defaultRoute
+  const route = target.startsWith('/') ? resolveRoute(target) : routeByName.get(target as AppRouteName) ?? defaultRoute
   if (typeof window !== 'undefined') {
     const historyMethod = replace ? window.history.replaceState : window.history.pushState
     historyMethod.call(window.history, {}, '', route.path)

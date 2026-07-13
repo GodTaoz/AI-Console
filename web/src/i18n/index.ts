@@ -62,7 +62,7 @@ const messages = {
       },
       hosts: {
         title: '主机监控',
-        description: '预留主机资产与健康视图，后续会接入节点列表、资源曲线与可用性状态。',
+        description: '实时读取主机资源、温度、电源、网络与根分区状态。',
         kicker: '主机监控',
         intro: '预留主机资产与健康视图，后续会接入节点列表、资源曲线与可用性状态。',
         sections: {
@@ -76,7 +76,7 @@ const messages = {
       },
       containers: {
         title: '容器服务',
-        description: '预留容器编排入口，后续会接入服务列表、运行实例与部署状态。',
+        description: '实时读取 Docker 容器、健康检查、镜像与端口映射。',
         kicker: '容器服务',
         intro: '预留容器编排入口，后续会接入服务列表、运行实例与部署状态。',
         sections: {
@@ -104,7 +104,7 @@ const messages = {
       },
       aiServices: {
         title: 'AI 服务',
-        description: '预留模型与推理服务入口，后续会接入提供方、路由与使用情况。',
+        description: '只读展示 CPA / Codex 额度池、剩余额度与重置倒计时。',
         kicker: 'AI 服务',
         intro: '预留模型与推理服务入口，后续会接入提供方、路由与使用情况。',
         sections: {
@@ -118,7 +118,7 @@ const messages = {
       },
       networkStorage: {
         title: '网络与存储',
-        description: '预留网络拓扑与存储资源入口，后续会接入挂载、链路与容量信息。',
+        description: '展示 NAS、根分区、挂载容量与主网络接口流量状态。',
         kicker: '网络与存储',
         intro: '预留网络拓扑与存储资源入口，后续会接入挂载、链路与容量信息。',
         sections: {
