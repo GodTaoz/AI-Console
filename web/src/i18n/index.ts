@@ -1,13 +1,17 @@
 import { createI18n } from 'vue-i18n'
+import { assertUiMessageParity, uiMessages } from './ui'
 
 export type LocaleCode = 'zh-CN' | 'en-US'
 
+assertUiMessageParity()
+
 const messages = {
   'zh-CN': {
+    ...uiMessages['zh-CN'],
     app: {
       title: 'AI-Console',
-      subtitle: '个人 AI 与基础设施指挥中心',
-      phase: 'Live Ops',
+      subtitle: 'AI 工作站健康与额度预警',
+      phase: '运行中',
       phaseDescription: '真实指标在线 · 只读安全模式',
       heroEyebrow: '本地优先 / 只读状态面板',
       heroDescription: '保留后端边界不变，先把导航、主题与多语言入口搭起来。',
@@ -29,7 +33,7 @@ const messages = {
     shell: {
       navigation: '导航',
       phase: '实时运行',
-      phaseDescription: '7 个核心服务 · 采集链路在线',
+      phaseDescription: '持续采集 · 只读监控',
       topbarEyebrow: '控制中枢',
       topbarHint: '系统正在守望 ThinkPad、Docker、NAS 与 AI 额度状态',
       pageHeaderEyebrow: '运维总览',
@@ -37,8 +41,10 @@ const messages = {
       liveData: '实时数据',
     },
     theme: {
-      light: '浅色模式',
-      dark: '深色模式',
+      system: '跟随系统',
+      light: '明亮',
+      soft: '柔和',
+      dark: '暗色',
     },
     pages: {
       common: {
@@ -48,7 +54,7 @@ const messages = {
       overview: {
         title: '总览',
         description: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
-        liveDescription: '实时汇总主机资源、Docker 服务、AI 额度与本地采集状态。',
+        liveDescription: '汇总主机、容器、额度与告警的最新采集状态。',
         kicker: '总览',
         intro: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
         sections: {
@@ -62,7 +68,7 @@ const messages = {
       },
       hosts: {
         title: '主机监控',
-        description: '实时读取主机资源、温度、电源、网络与根分区状态。',
+        description: '查看资源使用、实时吞吐、系统信息与进程占用排行。',
         kicker: '主机监控',
         intro: '预留主机资产与健康视图，后续会接入节点列表、资源曲线与可用性状态。',
         sections: {
@@ -76,7 +82,7 @@ const messages = {
       },
       containers: {
         title: '容器服务',
-        description: '实时读取 Docker 容器、健康检查、镜像与端口映射。',
+        description: '查看容器运行状态、健康检查、端口映射与运行时间。',
         kicker: '容器服务',
         intro: '预留容器编排入口，后续会接入服务列表、运行实例与部署状态。',
         sections: {
@@ -104,7 +110,7 @@ const messages = {
       },
       aiServices: {
         title: 'AI 服务',
-        description: '只读展示 CPA / Codex 额度池、剩余额度与重置倒计时。',
+        description: '查看 CPA / Codex 账号额度、使用进度与重置时间。',
         kicker: 'AI 服务',
         intro: '预留模型与推理服务入口，后续会接入提供方、路由与使用情况。',
         sections: {
@@ -118,7 +124,7 @@ const messages = {
       },
       networkStorage: {
         title: '网络与存储',
-        description: '展示 NAS、根分区、挂载容量与主网络接口流量状态。',
+        description: '查看存储容量、挂载状态与主网络接口实时吞吐。',
         kicker: '网络与存储',
         intro: '预留网络拓扑与存储资源入口，后续会接入挂载、链路与容量信息。',
         sections: {
@@ -132,7 +138,7 @@ const messages = {
       },
       alerts: {
         title: '告警记录',
-        description: '预留事件与告警入口，后续会接入规则、通知和处置流程。',
+        description: '查看活动告警、首次出现时间、发生次数与恢复记录。',
         kicker: '告警记录',
         intro: '预留事件与告警入口，后续会接入规则、通知和处置流程。',
         sections: {
@@ -171,10 +177,11 @@ const messages = {
     },
   },
   'en-US': {
+    ...uiMessages['en-US'],
     app: {
       title: 'AI-Console',
-      subtitle: 'Personal AI & infrastructure command center',
-      phase: 'Live Ops',
+      subtitle: 'AI workstation health and quota alerts',
+      phase: 'Live',
       phaseDescription: 'Live metrics · read-only safety mode',
       heroEyebrow: 'Local-first / read-only status panel',
       heroDescription: 'Keep the backend boundary intact and bring up navigation, theme, and language entry points first.',
@@ -196,7 +203,7 @@ const messages = {
     shell: {
       navigation: 'Navigation',
       phase: 'Live Ops',
-      phaseDescription: '7 core services · live collectors online',
+      phaseDescription: 'Scheduled collection · read-only monitoring',
       topbarEyebrow: 'Command Center',
       topbarHint: 'System is watching ThinkPad, Docker, NAS, and AI quota signals',
       pageHeaderEyebrow: 'AI Ops Console',
@@ -204,8 +211,10 @@ const messages = {
       liveData: 'Live data',
     },
     theme: {
-      light: 'Light mode',
-      dark: 'Dark mode',
+      system: 'System',
+      light: 'Light',
+      soft: 'Soft',
+      dark: 'Dark',
     },
     pages: {
       common: {
@@ -215,7 +224,7 @@ const messages = {
       overview: {
         title: 'Overview',
         description: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
-        liveDescription: 'Live overview for host resources, Docker services, AI quota, and local collector status.',
+        liveDescription: 'Latest host, container, quota, and alert status.',
         kicker: 'Overview',
         intro: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
         sections: {
@@ -229,7 +238,7 @@ const messages = {
       },
       hosts: {
         title: 'Host Monitoring',
-        description: 'Reserved for host inventory, health views, and resource curves once node data is connected.',
+        description: 'Resource usage, live throughput, system information, and top processes.',
         kicker: 'Host Monitoring',
         intro: 'Reserved for host inventory, health views, and resource curves once node data is connected.',
         sections: {
@@ -243,7 +252,7 @@ const messages = {
       },
       containers: {
         title: 'Container Services',
-        description: 'Reserved for service lists, running instances, and deployment state once orchestration data is available.',
+        description: 'Container runtime, health checks, port mappings, and uptime.',
         kicker: 'Container Services',
         intro: 'Reserved for service lists, running instances, and deployment state once orchestration data is available.',
         sections: {
@@ -271,7 +280,7 @@ const messages = {
       },
       aiServices: {
         title: 'AI Services',
-        description: 'Reserved for model providers, routing rules, and usage information once service data is connected.',
+        description: 'CPA and Codex quota usage, account status, and reset time.',
         kicker: 'AI Services',
         intro: 'Reserved for model providers, routing rules, and usage information once service data is connected.',
         sections: {
@@ -285,7 +294,7 @@ const messages = {
       },
       networkStorage: {
         title: 'Network & Storage',
-        description: 'Reserved for topology, mounted storage, and capacity information once the data layer is in place.',
+        description: 'Storage capacity, mount health, and live network throughput.',
         kicker: 'Network & Storage',
         intro: 'Reserved for topology, mounted storage, and capacity information once the data layer is in place.',
         sections: {
@@ -299,7 +308,7 @@ const messages = {
       },
       alerts: {
         title: 'Alert Records',
-        description: 'Reserved for events, notifications, and response workflows once alert feeds are connected.',
+        description: 'Active alerts, first seen time, occurrences, and recovery history.',
         kicker: 'Alert Records',
         intro: 'Reserved for events, notifications, and response workflows once alert feeds are connected.',
         sections: {

@@ -1,37 +1,60 @@
-from fastapi.testclient import TestClient
-
-from qingluo_console.main import create_app
+from pathlib import Path
 
 
-def dashboard_html(frontend_static_dir) -> str:
-    return TestClient(create_app(static_dir=frontend_static_dir)).get("/").text
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_dashboard_uses_mint_cyber_ops_design_language(frontend_static_dir):
-    html = dashboard_html(frontend_static_dir)
-
-    assert "Mint Cyber Ops" in html
-    assert "Qingluo Mint" in html
-    assert "Midnight Kernel" in html
-    assert "清萝正在值守" in html
-    assert "status-orb" in html
-    assert "QINGLUO OPS" in html
+def source(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_dashboard_has_operational_layout_components(frontend_static_dir):
-    html = dashboard_html(frontend_static_dir)
+def test_dashboard_has_light_and_dark_semantic_theme_tokens():
+    tokens = source("web/src/styles/tokens.css")
+    app = source("web/src/App.vue")
 
-    assert "hero-shell" in html
-    assert "command-grid" in html
-    assert "resource-bar" in html
-    assert "quota-cell" in html
-    assert "service-formation" in html
-    assert "non-core-containers" in html
-    assert "清萝建议" in html
+    assert ":root[data-theme='light']" in tokens
+    assert ":root[data-theme='dark']" in tokens
+    assert "--chart-grid" in tokens
+    assert 'theme-overrides="themeOverrides"' in app
 
 
-def test_dashboard_shortens_sensitive_or_long_account_labels_in_ui(frontend_static_dir):
-    html = dashboard_html(frontend_static_dir)
+def test_dashboard_uses_data_components_instead_of_manual_tables():
+    overview = source("web/src/pages/OverviewPage.vue")
+    hosts = source("web/src/pages/HostsPage.vue")
+    containers = source("web/src/pages/ContainersPage.vue")
 
-    assert "shortAccountName" in html
-    assert "replace(/@.*/,'')" in html
+    assert "NStatistic" in overview
+    assert "MetricChart" in overview
+    assert "NDescriptions" in hosts
+    assert "NDataTable" in hosts
+    assert "NDataTable" in containers
+    assert "<table" not in overview
+    assert "<table" not in hosts
+    assert "<table" not in containers
+
+
+def test_quota_identity_is_clear_and_progress_represents_used_quota():
+    overview = source("web/src/pages/OverviewPage.vue")
+
+    assert "account.email || account.name" in overview
+    assert "account.used_percent" in overview
+    assert "shortAccountName" not in overview
+
+
+def test_metric_chart_mounts_canvas_before_async_history_arrives():
+    chart = source("web/src/components/data/MetricChart.vue")
+
+    assert '<div ref="root" class="metric-chart" />' in chart
+    assert 'v-if="!hasData"' in chart
+    assert 'v-if="series.some' not in chart
+
+
+def test_topbar_uses_icon_menus_and_shell_has_no_footer():
+    topbar = source("web/src/components/layout/Topbar.vue")
+    shell = source("web/src/components/layout/AppShell.vue")
+    store = source("web/src/stores/ui.ts")
+
+    assert "GlobeOutline" in topbar
+    assert "theme-picker" in topbar
+    assert "system" in store and "soft" in store
+    assert "AppFooter" not in shell

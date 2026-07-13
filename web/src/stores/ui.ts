@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue'
 
-export type ThemeMode = 'light' | 'dark'
+export type ThemeMode = 'system' | 'light' | 'soft' | 'dark'
+export type ResolvedTheme = 'light' | 'soft' | 'dark'
 export type LanguageMode = 'zh-CN' | 'en-US'
 
 const THEME_KEY = 'ai-console-theme'
@@ -12,31 +13,31 @@ function getStoredValue<T extends string>(key: string, fallback: T): T {
   }
 
   const stored = window.localStorage.getItem(key)
-  return stored === 'light' || stored === 'dark' || stored === 'zh-CN' || stored === 'en-US'
+  return stored === 'system' || stored === 'light' || stored === 'soft' || stored === 'dark' || stored === 'zh-CN' || stored === 'en-US'
     ? (stored as T)
     : fallback
 }
 
-function detectPreferredTheme(): ThemeMode {
-  if (typeof window === 'undefined') {
-    return 'dark'
-  }
-
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+function detectPreferredLanguage(): LanguageMode {
+  if (typeof navigator === 'undefined') return 'zh-CN'
+  return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
 }
 
-export const theme = ref<ThemeMode>(getStoredValue(THEME_KEY, detectPreferredTheme()))
-export const language = ref<LanguageMode>(getStoredValue(LANGUAGE_KEY, 'zh-CN'))
-export const sidebarCollapsed = ref(false)
+const colorSchemeQuery = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-color-scheme: dark)') : undefined
+const systemPrefersDark = ref(colorSchemeQuery?.matches ?? false)
 
-export const isDarkTheme = computed(() => theme.value === 'dark')
+export const theme = ref<ThemeMode>(getStoredValue(THEME_KEY, 'system'))
+export const language = ref<LanguageMode>(getStoredValue(LANGUAGE_KEY, detectPreferredLanguage()))
+export const sidebarCollapsed = ref(typeof window !== 'undefined' && window.innerWidth < 900)
+
+export const resolvedTheme = computed<ResolvedTheme>(() => {
+  if (theme.value === 'system') return systemPrefersDark.value ? 'dark' : 'light'
+  return theme.value
+})
+export const isDarkTheme = computed(() => resolvedTheme.value === 'dark')
 
 export function setTheme(next: ThemeMode) {
   theme.value = next
-}
-
-export function toggleTheme() {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
 }
 
 export function setLanguage(next: LanguageMode) {
@@ -45,6 +46,12 @@ export function setLanguage(next: LanguageMode) {
 
 export function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+export function closeSidebarOnMobile() {
+  if (typeof window !== 'undefined' && window.innerWidth < 900) {
+    sidebarCollapsed.value = true
+  }
 }
 
 watch(
@@ -56,6 +63,10 @@ watch(
   },
   { immediate: true },
 )
+
+colorSchemeQuery?.addEventListener('change', (event) => {
+  systemPrefersDark.value = event.matches
+})
 
 watch(
   language,

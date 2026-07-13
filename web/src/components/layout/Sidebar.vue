@@ -13,6 +13,7 @@ import {
 } from '@vicons/ionicons5'
 
 import { appRoutes, currentRoute, navigate } from '@/router'
+import { closeSidebarOnMobile } from '@/stores/ui'
 
 const { t } = useI18n()
 
@@ -28,7 +29,7 @@ const routeIconMap = {
 } as const
 
 const navRoutes = computed(() =>
-  appRoutes.map((route) => ({
+  appRoutes.filter((route) => route.showInNavigation !== false).map((route) => ({
     ...route,
     label: t(route.titleKey),
     icon: routeIconMap[route.name],
@@ -38,10 +39,15 @@ const navRoutes = computed(() =>
 function isActive(path: string) {
   return currentRoute.value.path === path
 }
+
+function selectRoute(path: string) {
+  navigate(path)
+  closeSidebarOnMobile()
+}
 </script>
 
 <template>
-  <n-layout-sider class="sidebar" bordered width="292" collapse-mode="width" :native-scrollbar="false">
+  <aside class="sidebar">
     <div class="sidebar__inner">
       <section class="sidebar__brand">
         <div class="sidebar__kicker">AI-CONSOLE</div>
@@ -57,7 +63,7 @@ function isActive(path: string) {
             :key="route.path"
             :class="['sidebar__item', { 'sidebar__item--active': isActive(route.path) }]"
             type="button"
-            @click="navigate(route.path)"
+            @click="selectRoute(route.path)"
           >
             <span class="sidebar__item-icon">
               <n-icon size="18">
@@ -65,15 +71,14 @@ function isActive(path: string) {
               </n-icon>
             </span>
             <span class="sidebar__item-label">{{ route.label }}</span>
-            <span class="sidebar__item-glow" />
           </button>
         </div>
       </section>
 
       <section class="sidebar__status">
-        <NTag round size="small" type="success">{{ t('shell.phase') }}</NTag>
+        <NTag size="small" type="success">{{ t('shell.phase') }}</NTag>
         <p class="sidebar__status-copy">{{ t('shell.phaseDescription') }}</p>
       </section>
     </div>
-  </n-layout-sider>
+  </aside>
 </template>

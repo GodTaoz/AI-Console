@@ -1,13 +1,4 @@
-import { shallowRef, type Component } from 'vue'
-
-import AgentsPage from '@/pages/AgentsPage.vue'
-import AlertsPage from '@/pages/AlertsPage.vue'
-import AiServicesPage from '@/pages/AiServicesPage.vue'
-import ContainersPage from '@/pages/ContainersPage.vue'
-import HostsPage from '@/pages/HostsPage.vue'
-import NetworkStoragePage from '@/pages/NetworkStoragePage.vue'
-import OverviewPage from '@/pages/OverviewPage.vue'
-import SettingsPage from '@/pages/SettingsPage.vue'
+import { defineAsyncComponent, shallowRef, type Component } from 'vue'
 
 export type AppRouteName =
   | 'overview'
@@ -26,6 +17,7 @@ export interface AppRoute {
   descriptionKey: string
   statusKey?: string
   component: Component
+  showInNavigation?: boolean
 }
 
 export const appRoutes: AppRoute[] = [
@@ -35,7 +27,7 @@ export const appRoutes: AppRoute[] = [
     titleKey: 'pages.overview.title',
     descriptionKey: 'pages.overview.liveDescription',
     statusKey: 'shell.liveData',
-    component: OverviewPage,
+    component: defineAsyncComponent(() => import('@/pages/OverviewPage.vue')),
   },
   {
     name: 'hosts',
@@ -43,7 +35,7 @@ export const appRoutes: AppRoute[] = [
     titleKey: 'pages.hosts.title',
     descriptionKey: 'pages.hosts.description',
     statusKey: 'shell.liveData',
-    component: HostsPage,
+    component: defineAsyncComponent(() => import('@/pages/HostsPage.vue')),
   },
   {
     name: 'containers',
@@ -51,14 +43,15 @@ export const appRoutes: AppRoute[] = [
     titleKey: 'pages.containers.title',
     descriptionKey: 'pages.containers.description',
     statusKey: 'shell.liveData',
-    component: ContainersPage,
+    component: defineAsyncComponent(() => import('@/pages/ContainersPage.vue')),
   },
   {
     name: 'agents',
     path: '/agents',
     titleKey: 'pages.agents.title',
     descriptionKey: 'pages.agents.description',
-    component: AgentsPage,
+    component: defineAsyncComponent(() => import('@/pages/AgentsPage.vue')),
+    showInNavigation: false,
   },
   {
     name: 'ai-services',
@@ -66,7 +59,7 @@ export const appRoutes: AppRoute[] = [
     titleKey: 'pages.aiServices.title',
     descriptionKey: 'pages.aiServices.description',
     statusKey: 'shell.liveData',
-    component: AiServicesPage,
+    component: defineAsyncComponent(() => import('@/pages/AiServicesPage.vue')),
   },
   {
     name: 'network-storage',
@@ -74,21 +67,22 @@ export const appRoutes: AppRoute[] = [
     titleKey: 'pages.networkStorage.title',
     descriptionKey: 'pages.networkStorage.description',
     statusKey: 'shell.liveData',
-    component: NetworkStoragePage,
+    component: defineAsyncComponent(() => import('@/pages/NetworkStoragePage.vue')),
   },
   {
     name: 'alerts',
     path: '/alerts',
     titleKey: 'pages.alerts.title',
     descriptionKey: 'pages.alerts.description',
-    component: AlertsPage,
+    component: defineAsyncComponent(() => import('@/pages/AlertsPage.vue')),
   },
   {
     name: 'settings',
     path: '/settings',
     titleKey: 'pages.settings.title',
     descriptionKey: 'pages.settings.description',
-    component: SettingsPage,
+    component: defineAsyncComponent(() => import('@/pages/SettingsPage.vue')),
+    showInNavigation: false,
   },
 ]
 
@@ -134,4 +128,3 @@ export function initializeRouter() {
     currentRoute.value = resolveRoute(window.location.pathname)
   })
 }
-

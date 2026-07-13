@@ -13,7 +13,7 @@ def test_root_serves_built_dashboard_index_from_static_directory(frontend_static
     assert "AI-Console" in response.text
     assert "data-testid=\"summary-card\"" in response.text
     assert "script type=\"module\" src=\"/static/assets/main.js\"" in response.text
-    assert "Mint Cyber Ops" in response.text
+    assert "Self-hosted AI workstation operations" in response.text
 
 
 def test_static_assets_are_served(frontend_static_dir):

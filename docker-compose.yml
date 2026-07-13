@@ -8,14 +8,16 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:8010:8010"
+      - "8010:8010"
     volumes:
-      - ./data:/data
+      - ${QINGLUO_DATA_DIR:-/mnt/nas/docker/ai-console/data}:/data
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /etc/hostname:/host/etc/hostname:ro
+      - /etc/ufw:/host/etc/ufw:ro
       - /mnt/nas:/mnt/nas:ro
       - /mnt/nas/qingluo/tools/network-status.json:/mnt/nas/qingluo/tools/network-status.json:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - default
       - cpa_default
@@ -23,16 +25,59 @@ services:
       QINGLUO_CONSOLE_DB: /data/ai-console.sqlite3
       QINGLUO_PROC_ROOT: /host/proc
       QINGLUO_SYS_ROOT: /host/sys
+      QINGLUO_OS_RELEASE_PATH: /host/etc/os-release
+      QINGLUO_HOSTNAME_PATH: /host/etc/hostname
+      QINGLUO_UFW_ROOT: /host/etc/ufw
+      QINGLUO_HOST_IP: ${QINGLUO_HOST_IP:-192.168.10.10}
+      QINGLUO_SYSTEM_SAMPLE_SECONDS: "0.5"
+      QINGLUO_CPA_RETRY_ATTEMPTS: "3"
+      QINGLUO_CPA_RETRY_DELAY_SECONDS: "0.5"
       QINGLUO_NETWORK_STATUS_PATH: /mnt/nas/qingluo/tools/network-status.json
       QINGLUO_PRIMARY_INTERFACE: enp4s0
-      QINGLUO_DOCKER_SOCKET: /var/run/docker.sock
+      QINGLUO_DOCKER_BASE_URL: http://docker-socket-proxy:2375
       QINGLUO_CORE_CONTAINERS: hindsight,cli-proxy-api,mysql,redis,filebrowser-nas-root,webdav-nas-root,ai-console
+      QINGLUO_SCHEDULER_ENABLED: "true"
+      QINGLUO_COLLECTION_INTERVAL_SECONDS: "60"
+      QINGLUO_STALE_AFTER_SECONDS: "180"
+      QINGLUO_METRIC_RETENTION_DAYS: "7"
+      QINGLUO_SERVE_LATEST_ONLY: "true"
+    depends_on:
+      - docker-socket-proxy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=3).read()"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      POST: "0"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EXEC: "0"
+      IMAGES: "0"
+      INFO: "0"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VOLUMES: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
 
 networks:
   cpa_default:

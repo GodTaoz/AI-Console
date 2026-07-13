@@ -1,303 +1,152 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { NButton, NCard, NProgress, NTag } from 'naive-ui'
+import { computed, h, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { NAlert, NDataTable, NEmpty, NProgress, NSkeleton, NStatistic, type DataTableColumns } from 'naive-ui'
 
-import { formatBytes, formatPercent, getAiQuota, getDocker, getResources, getSummary, runCollect, shortAccountName } from '@/api'
-import type { AiQuotaResponse, ApiStatus, DockerResponse, ResourcesResponse, SummaryResponse } from '@/types'
+import { formatPercent, getAlerts, getMetricHistory, getSummary, runCollect } from '@/api'
+import DataPanel from '@/components/data/DataPanel.vue'
+import MetricChart, { type ChartSeries } from '@/components/data/MetricChart.vue'
+import PageToolbar from '@/components/data/PageToolbar.vue'
+import StatusTag from '@/components/data/StatusTag.vue'
+import { useConsoleFormatters } from '@/composables/useConsoleFormatters'
+import type { AiQuotaResponse, AlertsResponse, ApiStatus, DockerContainerSnapshot, DockerResponse, MetricHistoryResponse, ResourcesResponse, SummaryResponse } from '@/types'
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 
-type ModuleKey = 'summary' | 'resources' | 'docker' | 'aiQuota'
-
+const { t } = useI18n()
+const { duration, issueText } = useConsoleFormatters()
 const loadState = ref<LoadState>('idle')
-const lastUpdatedAt = ref<string>('')
-const errors = ref<Partial<Record<ModuleKey, string>>>({})
-
+const error = ref('')
+const lastUpdatedAt = ref('')
 const summary = ref<SummaryResponse | null>(null)
 const resources = ref<ResourcesResponse | null>(null)
 const docker = ref<DockerResponse | null>(null)
 const aiQuota = ref<AiQuotaResponse | null>(null)
+const alerts = ref<AlertsResponse | null>(null)
+const history = ref<MetricHistoryResponse | null>(null)
 
 const memoryUsedPercent = computed(() => {
   const memory = resources.value?.memory
-  if (!memory?.total_bytes) {
-    return null
-  }
-
-  return ((memory.total_bytes - memory.available_bytes) / memory.total_bytes) * 100
+  return memory?.total_bytes ? ((memory.total_bytes - memory.available_bytes) / memory.total_bytes) * 100 : null
 })
-
-const rootFilesystem = computed(() => resources.value?.filesystems.find((item) => item.mount === '/') ?? null)
-const nasFilesystem = computed(() => resources.value?.filesystems.find((item) => item.mount === '/mnt/nas') ?? null)
-
-const rootUsedPercent = computed(() => filesystemUsedPercent(rootFilesystem.value))
-const nasUsedPercent = computed(() => filesystemUsedPercent(nasFilesystem.value))
-
-const hottestTemperature = computed(() => {
-  const values = Object.values(resources.value?.thermal.temperatures_c ?? {})
-  return values.length ? Math.max(...values) : null
-})
-
-const coreContainers = computed(() => {
-  const coreNames = new Set(['ai-console', 'cli-proxy-api', 'filebrowser-nas-root', 'webdav-nas-root', 'hindsight', 'redis', 'mysql'])
-  return docker.value?.containers.filter((container) => coreNames.has(container.name)) ?? []
-})
-
-const healthyCoreCount = computed(() => coreContainers.value.filter((container) => container.status === 'ok').length)
-const quotaAccountCount = computed(() => aiQuota.value?.accounts.length ?? 0)
-const storageVolumeCount = computed(() => resources.value?.filesystems.length ?? 0)
-
-const commandSummary = computed(() => [
-  { label: '核心服务', value: `${healthyCoreCount.value}/${coreContainers.value.length || 7}` },
-  { label: '存储卷', value: String(storageVolumeCount.value || '—') },
-  { label: 'AI 额度池', value: String(quotaAccountCount.value || '—') },
+const coreContainers = computed(() => docker.value?.containers.filter((container) => container.core) ?? [])
+const overallStatus = computed<ApiStatus>(() => summary.value?.status ?? 'unknown')
+const activeIssues = computed(() => alerts.value?.events.filter((item) => item.state === 'active') ?? [])
+const trendSeries = computed<ChartSeries[]>(() => [
+  { name: t('overviewUi.cpu'), unit: 'percent', points: metricPoints('cpu_used_percent') },
+  { name: t('overviewUi.memory'), unit: 'percent', points: metricPoints('memory_used_percent') },
 ])
 
-function productizeIssue(message: string) {
-  if (/fetch quota/i.test(message) || /TimeoutError/i.test(message)) {
-    return 'AI 额度池部分账号本次采集超时，稍后可点击刷新采集重试。'
-  }
-
-  return message
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[account]')
-    .replace(/codex-[^\s:]+\.json/gi, 'Codex account')
+function metricPoints(metric: string) {
+  return history.value?.series.find((item) => item.metric === metric)?.points ?? []
 }
-
-const allIssues = computed(() => Array.from(new Set([
-  ...(resources.value?.issues ?? []).map((issue) => productizeIssue(issue.message)),
-  ...(docker.value?.issues ?? []).map((issue) => productizeIssue(issue.message)),
-  ...(aiQuota.value?.issues ?? []).map((issue) => productizeIssue(issue.message)),
-  ...Object.values(errors.value).map((issue) => productizeIssue(issue)),
-].filter(Boolean))))
-
-const overallStatus = computed<ApiStatus>(() => {
-  const liveStatuses = [resources.value?.status, docker.value?.status, aiQuota.value?.status].filter(Boolean) as ApiStatus[]
-  const statuses = liveStatuses.length ? liveStatuses : ([summary.value?.status].filter(Boolean) as ApiStatus[])
-  if (statuses.includes('critical')) return 'critical'
-  if (statuses.includes('warning')) return 'warning'
-  if (statuses.includes('unknown')) return 'unknown'
-  return statuses.length ? 'ok' : 'unknown'
-})
-
-const statusText = computed(() => {
-  if (overallStatus.value === 'ok') return '核心服务正常'
-  if (overallStatus.value === 'warning') return '存在需要关注的告警'
-  if (overallStatus.value === 'critical') return '存在严重异常'
-  return '等待采集数据'
-})
-
-function filesystemUsedPercent(item: { total_bytes: number; used_bytes: number } | null) {
-  if (!item?.total_bytes) {
-    return null
-  }
-
-  return (item.used_bytes / item.total_bytes) * 100
+function healthLabel(container: DockerContainerSnapshot) {
+  if (container.health === 'healthy') return t('containerUi.passed')
+  if (container.health === 'unhealthy') return t('containerUi.failed')
+  if (container.health === 'starting') return t('containerUi.checking')
+  return t('containerUi.notConfigured')
 }
-
-function statusTagType(status: ApiStatus | null | undefined) {
-  if (status === 'ok') return 'success'
-  if (status === 'warning') return 'warning'
-  if (status === 'critical') return 'error'
-  return 'default'
+function runtimeLabel(container: DockerContainerSnapshot) {
+  return container.state === 'running' ? t('overviewUi.running') : t('overviewUi.stopped')
 }
+const containerColumns = computed<DataTableColumns<DockerContainerSnapshot>>(() => [
+  {
+    title: t('containerUi.container'), key: 'name', width: 300, ellipsis: { tooltip: true },
+    render: (row) => h('div', { class: 'table-primary' }, [h('strong', row.name), h('span', row.image)]),
+  },
+  {
+    title: t('containerUi.runtime'), key: 'state', width: 130,
+    render: (row) => h('div', { class: 'status-pair' }, [h('span', { class: ['status-dot', row.state === 'running' ? 'status-dot--ok' : ''] }), runtimeLabel(row)]),
+  },
+  {
+    title: t('containerUi.health'), key: 'health', width: 150,
+    render: (row) => h('div', { class: 'status-pair' }, [h('span', { class: ['status-dot', row.health === 'healthy' ? 'status-dot--ok' : row.health === 'unhealthy' ? 'status-dot--critical' : ''] }), healthLabel(row)]),
+  },
+  { title: t('containerUi.uptime'), key: 'uptime', width: 150, render: (row) => duration(row.uptime_seconds) },
+  { title: t('common.status'), key: 'status', width: 110, render: (row) => h(StatusTag, { status: row.status }) },
+])
 
-function statusLabel(status: ApiStatus | string | null | undefined) {
-  if (status === 'ok') return '正常'
-  if (status === 'warning') return '关注'
-  if (status === 'critical') return '异常'
-  if (status === 'unsupported') return '不支持'
-  if (status === 'permission_denied') return '无权限'
-  if (status === 'running') return '运行中'
-  if (status === 'healthy') return '健康'
-  if (status === 'online') return '在线'
-  if (!status || status === 'unknown') return '未知'
-  return String(status)
-}
-
-function asErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
-}
-
-async function loadDashboard(options: { collectFirst?: boolean } = {}) {
+async function loadDashboard(collectFirst = false) {
   loadState.value = 'loading'
-  errors.value = {}
-
-  if (options.collectFirst) {
-    try {
-      await runCollect()
-    } catch (error) {
-      errors.value.summary = `采集触发失败：${asErrorMessage(error)}`
+  error.value = ''
+  try {
+    if (collectFirst) {
+      const result = await runCollect()
+      resources.value = result.modules.resources.payload
+      docker.value = result.modules.docker.payload
+      aiQuota.value = result.modules.ai_quota.payload
+      lastUpdatedAt.value = result.collected_at
+    } else {
+      summary.value = await getSummary()
+      resources.value = summary.value.modules.resources?.payload ?? null
+      docker.value = summary.value.modules.docker?.payload ?? null
+      aiQuota.value = summary.value.modules.ai_quota?.payload ?? null
+      lastUpdatedAt.value = Object.values(summary.value.modules).map((item) => item?.updated_at ?? '').sort().at(-1) ?? ''
     }
+    ;[history.value, alerts.value] = await Promise.all([
+      getMetricHistory(['cpu_used_percent', 'memory_used_percent']),
+      getAlerts(),
+    ])
+    loadState.value = 'ready'
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+    loadState.value = 'error'
   }
-
-  const results = await Promise.allSettled([
-    getSummary(),
-    getResources(),
-    getDocker(),
-    getAiQuota(),
-  ])
-
-  const [summaryResult, resourcesResult, dockerResult, aiQuotaResult] = results
-
-  if (summaryResult.status === 'fulfilled') summary.value = summaryResult.value
-  else errors.value.summary = asErrorMessage(summaryResult.reason)
-
-  if (resourcesResult.status === 'fulfilled') resources.value = resourcesResult.value
-  else errors.value.resources = asErrorMessage(resourcesResult.reason)
-
-  if (dockerResult.status === 'fulfilled') docker.value = dockerResult.value
-  else errors.value.docker = asErrorMessage(dockerResult.reason)
-
-  if (aiQuotaResult.status === 'fulfilled') aiQuota.value = aiQuotaResult.value
-  else errors.value.aiQuota = asErrorMessage(aiQuotaResult.reason)
-
-  lastUpdatedAt.value = new Date().toLocaleString()
-  loadState.value = Object.keys(errors.value).length === 4 ? 'error' : 'ready'
 }
-
-onMounted(() => {
-  void loadDashboard()
-})
+onMounted(() => void loadDashboard())
 </script>
 
 <template>
   <section class="overview-dashboard">
-    <NCard class="overview-hero" bordered>
-      <div class="overview-hero__content">
-        <div>
-          <div class="overview-hero__kicker">Live Overview</div>
-          <h2 class="overview-hero__title">{{ statusText }}</h2>
-          <p class="overview-hero__copy">
-            本地采集器已连接，正在守望主机资源、Docker 编队、NAS 存储与 Codex 额度池。
-          </p>
-          <div class="overview-hero__chain" aria-label="采集链路">
-            <span>Local Collector</span>
-            <i />
-            <span>Host</span>
-            <i />
-            <span>Docker</span>
-            <i />
-            <span>AI Quota</span>
-          </div>
-        </div>
+    <PageToolbar :status="overallStatus" :updated-at="lastUpdatedAt" :loading="loadState === 'loading'" collect @refresh="loadDashboard(true)">
+      <span>{{ overallStatus === 'ok' ? t('overviewUi.allOk') : t('overviewUi.hasIssues') }}</span>
+    </PageToolbar>
 
-        <div class="overview-hero__status">
-          <div class="overview-hero__status-row">
-            <NTag round :type="statusTagType(overallStatus)">{{ statusLabel(overallStatus) }}</NTag>
-            <span class="overview-hero__time">{{ lastUpdatedAt || '尚未刷新' }}</span>
-          </div>
-          <div class="overview-hero__summary">
-            <article v-for="item in commandSummary" :key="item.label" class="overview-hero__summary-item">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
-            </article>
-          </div>
-          <NButton :loading="loadState === 'loading'" strong type="primary" @click="loadDashboard({ collectFirst: true })">
-            刷新采集
-          </NButton>
-        </div>
-      </div>
-    </NCard>
+    <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
 
-    <div class="overview-sections">
-      <NCard class="overview-card overview-section-card" bordered>
-        <div class="overview-section-card__meta">
-          <div class="overview-section-card__eyebrow">Host</div>
-          <h3>服务器资源</h3>
-          <p>ThinkPad 节点运行状态、内存、温度与电源健康。</p>
-          <NTag size="small" :type="statusTagType(resources?.status)">{{ statusLabel(resources?.status) }}</NTag>
-        </div>
-        <div class="overview-section-card__body overview-resource-grid">
-          <article class="overview-kpi overview-kpi--primary">
-            <span>内存占用</span>
-            <strong>{{ formatPercent(memoryUsedPercent) }}</strong>
-            <NProgress type="line" :percentage="memoryUsedPercent ?? 0" :show-indicator="false" status="success" />
-          </article>
-          <article class="overview-kpi">
-            <span>最高温度</span>
-            <strong>{{ hottestTemperature === null ? '—' : `${hottestTemperature.toFixed(1)} ℃` }}</strong>
-          </article>
-          <article class="overview-kpi">
-            <span>电池</span>
-            <strong>{{ formatPercent(resources?.power.battery_percent, 0) }}</strong>
-          </article>
-        </div>
-      </NCard>
-
-      <NCard class="overview-card overview-section-card" bordered>
-        <div class="overview-section-card__meta">
-          <div class="overview-section-card__eyebrow">Storage</div>
-          <h3>存储</h3>
-          <p>本地根分区与 NAS 挂载容量，保持低水位预警。</p>
-          <NTag size="small" :type="statusTagType(rootFilesystem?.status ?? nasFilesystem?.status)">在线</NTag>
-        </div>
-        <div class="overview-section-card__body overview-storage-list">
-          <article class="overview-storage-row">
-            <div>
-              <strong>/</strong>
-              <p>{{ rootFilesystem ? `${formatBytes(rootFilesystem.used_bytes)} / ${formatBytes(rootFilesystem.total_bytes)}` : '暂无根分区数据' }}</p>
-            </div>
-            <span>{{ formatPercent(rootUsedPercent) }}</span>
-            <NProgress type="line" :percentage="rootUsedPercent ?? 0" :show-indicator="false" />
-          </article>
-          <article class="overview-storage-row">
-            <div>
-              <strong>/mnt/nas</strong>
-              <p>{{ nasFilesystem ? `${formatBytes(nasFilesystem.used_bytes)} / ${formatBytes(nasFilesystem.total_bytes)}` : '暂无 NAS 数据' }}</p>
-            </div>
-            <span>{{ formatPercent(nasUsedPercent) }}</span>
-            <NProgress type="line" :percentage="nasUsedPercent ?? 0" :show-indicator="false" status="success" />
-          </article>
-        </div>
-      </NCard>
-
-      <NCard class="overview-card overview-section-card" bordered>
-        <div class="overview-section-card__meta">
-          <div class="overview-section-card__eyebrow">AI Quota</div>
-          <h3>AI 额度</h3>
-          <p>Codex 额度池使用率、剩余额度与重置倒计时。</p>
-          <NTag size="small" :type="statusTagType(aiQuota?.status)">{{ statusLabel(aiQuota?.status) }}</NTag>
-        </div>
-        <div class="overview-section-card__body overview-quota-list">
-          <article v-for="account in aiQuota?.accounts ?? []" :key="account.id" class="overview-quota-row">
-            <div>
-              <strong>{{ shortAccountName(account.name) }}</strong>
-              <p v-if="account.used_percent !== null">已用 {{ formatPercent(account.used_percent) }} · 剩余 {{ formatPercent(account.remaining_percent) }}</p>
-              <p v-else>本次采集超时，等待下次刷新。</p>
-            </div>
-            <div class="overview-quota-row__bar">
-              <NProgress type="line" :percentage="account.used_percent ?? 0" :show-indicator="false" :status="account.used_percent === null ? 'warning' : 'success'" />
-              <span v-if="account.reset_credits_available !== null">剩余额度 {{ account.reset_credits_available }} · {{ account.reset_after_seconds ?? '—' }} 秒后重置</span>
-              <span v-else>额度明细暂不可用</span>
-            </div>
-          </article>
-          <p v-if="!aiQuota?.accounts?.length" class="overview-card__muted">暂无 AI 额度数据</p>
-        </div>
-      </NCard>
-
-      <NCard class="overview-card overview-section-card" bordered>
-        <div class="overview-section-card__meta">
-          <div class="overview-section-card__eyebrow">Docker</div>
-          <h3>Docker 编队</h3>
-          <p>核心服务健康巡检，异常会进入智能建议。</p>
-          <NTag size="small" :type="statusTagType(docker?.status)">{{ statusLabel(docker?.status) }}</NTag>
-        </div>
-        <div class="overview-section-card__body overview-service-grid">
-          <article v-for="container in coreContainers" :key="container.name" class="overview-service-row">
-            <span class="overview-service-row__dot" />
-            <strong>{{ container.name }}</strong>
-            <NTag size="small" :type="statusTagType(container.status)">{{ statusLabel(container.health ?? container.status) }}</NTag>
-          </article>
-        </div>
-      </NCard>
+    <div class="dashboard-grid dashboard-grid--four">
+      <DataPanel :title="t('overviewUi.cpu')" compact><NStatistic class="metric-stat" :value="formatPercent(resources?.cpu.usage_percent)" /></DataPanel>
+      <DataPanel :title="t('overviewUi.memory')" compact><NStatistic class="metric-stat" :value="formatPercent(memoryUsedPercent)" /></DataPanel>
+      <DataPanel :title="t('overviewUi.coreContainers')" compact><NStatistic class="metric-stat" :value="docker?.core_summary.healthy ?? '—'"><template v-if="docker" #suffix>/ {{ docker.core_summary.expected }}</template></NStatistic></DataPanel>
+      <DataPanel :title="t('overviewUi.activeIssues')" compact><NStatistic class="metric-stat" :value="alerts ? activeIssues.length : '—'" /></DataPanel>
     </div>
 
-    <NCard class="overview-advice" bordered>
-      <template #header>智能建议</template>
-      <p v-if="!allIssues.length">暂无需要处理的问题。系统会继续监控资源、Docker 服务和 AI 额度。</p>
-      <ul v-else>
-        <li v-for="issue in allIssues" :key="issue">{{ issue }}</li>
-      </ul>
-    </NCard>
+    <div class="dashboard-grid">
+      <DataPanel :title="t('overviewUi.resourceTrend')" wide>
+        <template #extra><span class="panel-caption">{{ t('common.last24Hours') }}</span></template>
+        <NSkeleton v-if="loadState === 'loading' && !history" text :repeat="5" />
+        <MetricChart v-else :series="trendSeries" :aria-label="t('overviewUi.resourceTrend')" :height="250" />
+      </DataPanel>
+
+      <DataPanel :title="t('overviewUi.quota')" wide>
+        <template #extra><StatusTag :status="aiQuota?.status" /></template>
+        <div v-if="aiQuota?.accounts.length" class="quota-list-v2">
+          <div v-for="account in aiQuota.accounts" :key="account.id" class="quota-row-v2">
+            <div class="quota-row-v2__identity"><strong>{{ account.email || account.name }}</strong><span>{{ account.provider.toUpperCase() }}</span></div>
+            <div class="quota-row-v2__progress">
+              <NProgress type="line" :percentage="account.used_percent ?? 0" :show-indicator="false" :status="(account.used_percent ?? 0) >= 90 ? 'error' : (account.used_percent ?? 0) >= 70 ? 'warning' : 'success'" />
+              <span>{{ t('quotaUi.used', { value: formatPercent(account.used_percent) }) }}</span>
+            </div>
+            <span class="quota-row-v2__reset">{{ account.reset_after_seconds === null ? t('overviewUi.resetUnknown') : t('overviewUi.resetsIn', { duration: duration(account.reset_after_seconds) }) }}</span>
+            <StatusTag :status="account.status" />
+          </div>
+        </div>
+        <NEmpty v-else class="panel-empty" :description="t('overviewUi.noQuota')" />
+      </DataPanel>
+
+      <DataPanel :title="t('overviewUi.containers')" wide>
+        <template #extra><StatusTag :status="docker?.status" /></template>
+        <NDataTable class="data-table-v2" :columns="containerColumns" :data="coreContainers" :row-key="(row: DockerContainerSnapshot) => row.name" :scroll-x="840" size="small" />
+      </DataPanel>
+
+      <DataPanel :title="t('overviewUi.events')" wide>
+        <div v-if="activeIssues.length" class="alert-stack">
+          <NAlert v-for="item in activeIssues.slice(0, 6)" :key="item.fingerprint" :type="item.severity === 'critical' ? 'error' : 'warning'" :title="issueText(item.code, item.title)">
+            {{ item.source }} · {{ item.occurrence_count }}
+          </NAlert>
+        </div>
+        <NAlert v-else type="success" :show-icon="true">{{ t('overviewUi.noIssues') }}</NAlert>
+      </DataPanel>
+    </div>
   </section>
 </template>

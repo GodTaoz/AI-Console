@@ -3,7 +3,7 @@ import { createApp, watch } from 'vue'
 import App from './App.vue'
 import { createConsoleI18n } from './i18n'
 import { initializeRouter } from './router'
-import { language, theme } from './stores/ui'
+import { language, resolvedTheme } from './stores/ui'
 import './styles/global.css'
 import './styles/tokens.css'
 
@@ -20,7 +20,7 @@ watch(
 )
 
 watch(
-  theme,
+  resolvedTheme,
   (value) => {
     document.documentElement.dataset.theme = value
   },

@@ -1,123 +1,98 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { NButton, NCard, NProgress, NTag } from 'naive-ui'
+import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { NAlert, NDataTable, NDescriptions, NDescriptionsItem, NEmpty, NProgress, NStatistic, type DataTableColumns } from 'naive-ui'
 
-import { filesystemUsedPercent, formatBytes, formatPercent, getResources, statusLabel } from '@/api'
-import type { ApiStatus, ResourcesResponse } from '@/types'
+import { filesystemUsedPercent, formatBytes, formatBytesPerSecond, formatPercent, getResources } from '@/api'
+import DataPanel from '@/components/data/DataPanel.vue'
+import PageToolbar from '@/components/data/PageToolbar.vue'
+import StatusTag from '@/components/data/StatusTag.vue'
+import type { FilesystemSnapshot, FirewallRule, ListeningPort, ResourcesResponse } from '@/types'
 
 const resources = ref<ResourcesResponse | null>(null)
+const { t } = useI18n()
 const loading = ref(false)
 const error = ref('')
 const updatedAt = ref('')
-
-const rootFilesystem = computed(() => resources.value?.filesystems.find((item) => item.mount === '/') ?? null)
+const securityColumns = ref(4)
 const nasFilesystem = computed(() => resources.value?.filesystems.find((item) => item.mount === '/mnt/nas') ?? null)
 const network = computed(() => resources.value?.network ?? null)
-const totalStorageBytes = computed(() => resources.value?.filesystems.reduce((sum, item) => sum + item.total_bytes, 0) ?? 0)
-const usedStorageBytes = computed(() => resources.value?.filesystems.reduce((sum, item) => sum + item.used_bytes, 0) ?? 0)
-const totalStoragePercent = computed(() => totalStorageBytes.value ? (usedStorageBytes.value / totalStorageBytes.value) * 100 : null)
-
-function tagType(status: ApiStatus | null | undefined) {
-  if (status === 'ok') return 'success'
-  if (status === 'warning') return 'warning'
-  if (status === 'critical') return 'error'
-  return 'default'
-}
+const atRiskVolumes = computed(() => resources.value?.filesystems.filter((item) => item.status !== 'ok').length ?? 0)
+const firewall = computed(() => resources.value?.security.firewall ?? null)
+const listeningPorts = computed(() => resources.value?.security.listening_ports ?? [])
+const externallyListeningCount = computed(() => listeningPorts.value.filter((item) => item.scope !== 'loopback').length)
+const volumeColumns = computed<DataTableColumns<FilesystemSnapshot>>(() => [
+  { title: t('networkUi.mount'), key: 'mount', minWidth: 180 },
+  { title: t('networkUi.usedCapacity'), key: 'used', width: 190, align: 'right', render: (row) => `${formatBytes(row.used_bytes)} / ${formatBytes(row.total_bytes)}` },
+  { title: t('networkUi.usage'), key: 'usage', width: 260, render: (row) => h('div', { class: 'table-progress' }, [h(NProgress, { type: 'line', percentage: filesystemUsedPercent(row) ?? 0, showIndicator: false, status: row.status === 'ok' ? 'success' : 'warning' }), h('span', formatPercent(filesystemUsedPercent(row)))]) },
+  { title: t('common.status'), key: 'status', width: 110, render: (row) => h(StatusTag, { status: row.status }) },
+])
+const firewallColumns = computed<DataTableColumns<FirewallRule>>(() => [
+  { title: t('securityUi.port'), key: 'port', width: 130, align: 'right' },
+  { title: t('securityUi.protocol'), key: 'protocol', width: 120, render: (row) => row.protocol.toUpperCase() },
+  { title: t('securityUi.source'), key: 'source', minWidth: 200, render: (row) => row.source === 'anywhere' ? t('securityUi.anywhere') : row.source },
+  { title: t('securityUi.addressFamily'), key: 'family', width: 120, render: (row) => row.family.toUpperCase() },
+])
+const listeningColumns = computed<DataTableColumns<ListeningPort>>(() => [
+  { title: t('securityUi.port'), key: 'port', width: 130, align: 'right' },
+  { title: t('securityUi.protocol'), key: 'protocol', width: 120, render: (row) => row.protocol.toUpperCase() },
+  { title: t('securityUi.listenAddress'), key: 'address', minWidth: 220 },
+  { title: t('securityUi.exposure'), key: 'scope', minWidth: 180, render: (row) => t(`securityUi.scope.${row.scope}`) },
+])
 
 async function loadResources() {
-  loading.value = true
-  error.value = ''
-  try {
-    resources.value = await getResources()
-    updatedAt.value = new Date().toLocaleString()
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    loading.value = false
-  }
+  loading.value = true; error.value = ''
+  try { resources.value = await getResources(); updatedAt.value = resources.value.collected_at ?? '' }
+  catch (err) { error.value = err instanceof Error ? err.message : String(err) }
+  finally { loading.value = false }
 }
-
+function updateSecurityColumns() {
+  securityColumns.value = window.innerWidth <= 680 ? 1 : window.innerWidth <= 1100 ? 2 : 4
+}
 onMounted(() => {
+  updateSecurityColumns()
+  window.addEventListener('resize', updateSecurityColumns)
   void loadResources()
 })
+onBeforeUnmount(() => window.removeEventListener('resize', updateSecurityColumns))
 </script>
 
 <template>
   <section class="ops-page">
-    <NCard class="ops-hero" bordered>
-      <div class="ops-hero__copy">
-        <div class="ops-hero__eyebrow">Network & Storage</div>
-        <h2>网络与存储</h2>
-        <p>展示 NAS、根分区、挂载容量与主网络接口流量状态。</p>
-      </div>
-      <div class="ops-hero__status">
-        <NTag round :type="tagType(resources?.status)">{{ statusLabel(resources?.status) }}</NTag>
-        <span>{{ updatedAt || '等待刷新' }}</span>
-        <NButton :loading="loading" type="primary" strong @click="loadResources">刷新</NButton>
-      </div>
-    </NCard>
-
-    <NCard v-if="error" class="ops-alert" bordered>{{ error }}</NCard>
-
-    <div class="ops-metric-grid">
-      <NCard class="ops-metric-card" bordered>
-        <span>总存储占用</span>
-        <strong>{{ formatPercent(totalStoragePercent) }}</strong>
-        <NProgress type="line" :percentage="totalStoragePercent ?? 0" :show-indicator="false" status="success" />
-        <p>{{ formatBytes(usedStorageBytes) }} / {{ formatBytes(totalStorageBytes) }}</p>
-      </NCard>
-      <NCard class="ops-metric-card" bordered>
-        <span>NAS 占用</span>
-        <strong>{{ formatPercent(filesystemUsedPercent(nasFilesystem)) }}</strong>
-        <p>{{ nasFilesystem ? `${formatBytes(nasFilesystem.used_bytes)} / ${formatBytes(nasFilesystem.total_bytes)}` : '暂无 NAS 数据' }}</p>
-      </NCard>
-      <NCard class="ops-metric-card" bordered>
-        <span>主网卡</span>
-        <strong>{{ network?.primary_interface || '—' }}</strong>
-        <p>{{ statusLabel(network?.status) }}</p>
-      </NCard>
-      <NCard class="ops-metric-card" bordered>
-        <span>挂载点</span>
-        <strong>{{ resources?.filesystems.length ?? 0 }}</strong>
-        <p>当前已识别文件系统</p>
-      </NCard>
+    <PageToolbar :status="resources?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadResources" />
+    <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
+    <div class="dashboard-grid dashboard-grid--four">
+      <DataPanel :title="t('networkUi.riskVolumes')" compact><NStatistic class="metric-stat" :value="resources ? atRiskVolumes : '—'" /></DataPanel>
+      <DataPanel :title="t('networkUi.nasUsage')" compact><NStatistic class="metric-stat" :value="formatPercent(filesystemUsedPercent(nasFilesystem))" /></DataPanel>
+      <DataPanel :title="t('networkUi.interface')" compact><NStatistic class="metric-stat" :value="network?.primary_interface || '—'" /></DataPanel>
+      <DataPanel :title="t('networkUi.mounts')" compact><NStatistic class="metric-stat" :value="resources?.filesystems.length ?? '—'" /></DataPanel>
     </div>
-
-    <NCard class="ops-section" bordered>
-      <template #header>存储卷</template>
-      <div class="ops-storage-list">
-        <article v-for="filesystem in resources?.filesystems ?? []" :key="filesystem.mount" class="ops-storage-row">
-          <div>
-            <strong>{{ filesystem.mount }}</strong>
-            <p>{{ formatBytes(filesystem.used_bytes) }} / {{ formatBytes(filesystem.total_bytes) }}</p>
-          </div>
-          <span>{{ formatPercent(filesystemUsedPercent(filesystem)) }}</span>
-          <NProgress type="line" :percentage="filesystemUsedPercent(filesystem) ?? 0" :show-indicator="false" :status="filesystem.status === 'ok' ? 'success' : 'warning'" />
-          <NTag size="small" :type="tagType(filesystem.status)">{{ statusLabel(filesystem.status) }}</NTag>
-        </article>
-        <p v-if="!resources?.filesystems?.length" class="ops-muted">暂无存储卷数据。</p>
-      </div>
-    </NCard>
-
-    <NCard class="ops-section" bordered>
-      <template #header>网络接口</template>
-      <div class="ops-lane-grid">
-        <article class="ops-lane">
-          <span>主接口</span>
-          <strong>{{ network?.primary_interface || '—' }}</strong>
-          <p>状态：{{ statusLabel(network?.status) }}</p>
-        </article>
-        <article class="ops-lane">
-          <span>接收流量</span>
-          <strong>{{ formatBytes(network?.rx_bytes) }}</strong>
-          <p>累计 RX bytes</p>
-        </article>
-        <article class="ops-lane">
-          <span>发送流量</span>
-          <strong>{{ formatBytes(network?.tx_bytes) }}</strong>
-          <p>累计 TX bytes</p>
-        </article>
-      </div>
-    </NCard>
+    <div class="dashboard-grid">
+      <DataPanel :title="t('networkUi.network')" wide>
+        <div class="throughput-grid">
+          <NStatistic :label="t('networkUi.receive')" :value="formatBytesPerSecond(network?.rx_bytes_per_second)"><template #suffix><small>{{ t('networkUi.totalShort', { value: formatBytes(network?.rx_bytes) }) }}</small></template></NStatistic>
+          <NStatistic :label="t('networkUi.send')" :value="formatBytesPerSecond(network?.tx_bytes_per_second)"><template #suffix><small>{{ t('networkUi.totalShort', { value: formatBytes(network?.tx_bytes) }) }}</small></template></NStatistic>
+        </div>
+      </DataPanel>
+      <DataPanel :title="t('networkUi.volumes')" wide><NDataTable class="data-table-v2" :columns="volumeColumns" :data="resources?.filesystems ?? []" :row-key="(row: FilesystemSnapshot) => row.mount" :scroll-x="760" size="small" /></DataPanel>
+      <DataPanel :title="t('securityUi.firewall')" wide>
+        <template #extra><StatusTag :status="firewall?.status" /></template>
+        <NDescriptions class="descriptions-v2" bordered label-placement="top" :column="securityColumns" size="small">
+          <NDescriptionsItem :label="t('securityUi.provider')">{{ firewall?.provider === 'ufw' ? 'UFW' : t('common.noData') }}</NDescriptionsItem>
+          <NDescriptionsItem :label="t('securityUi.firewallState')">{{ firewall?.enabled === true ? t('securityUi.enabled') : firewall?.enabled === false ? t('securityUi.disabled') : t('status.unknown') }}</NDescriptionsItem>
+          <NDescriptionsItem :label="t('securityUi.allowRules')">{{ firewall?.rules.length ?? '—' }}</NDescriptionsItem>
+          <NDescriptionsItem :label="t('securityUi.listeningCount')">{{ resources ? `${externallyListeningCount} / ${listeningPorts.length}` : '—' }}</NDescriptionsItem>
+        </NDescriptions>
+        <NAlert class="security-note" type="info" :show-icon="true">{{ t('securityUi.explanation') }}</NAlert>
+      </DataPanel>
+      <DataPanel :title="t('securityUi.allowedPorts')">
+        <NDataTable v-if="firewall?.rules.length" class="data-table-v2" :columns="firewallColumns" :data="firewall.rules" :row-key="(row: FirewallRule) => `${row.port}-${row.protocol}-${row.source}-${row.family}`" :pagination="{ pageSize: 10 }" :scroll-x="640" size="small" />
+        <NEmpty v-else class="panel-empty" :description="t('securityUi.noRules')" />
+      </DataPanel>
+      <DataPanel :title="t('securityUi.listeningPorts')">
+        <NDataTable v-if="listeningPorts.length" class="data-table-v2" :columns="listeningColumns" :data="listeningPorts" :row-key="(row: ListeningPort) => `${row.port}-${row.protocol}-${row.address}`" :pagination="{ pageSize: 12 }" :scroll-x="650" size="small" />
+        <NEmpty v-else class="panel-empty" :description="t('securityUi.noListeningPorts')" />
+      </DataPanel>
+    </div>
   </section>
 </template>

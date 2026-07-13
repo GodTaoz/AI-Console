@@ -2,9 +2,11 @@ FROM node:22-slim AS web-build
 
 WORKDIR /app
 
-COPY web ./web
+COPY web/package.json web/package-lock.json ./web/
+RUN cd web && npm ci
 
-RUN cd web && npm install && npm run build
+COPY web ./web
+RUN cd web && npm run build
 
 FROM python:3.11-slim
 

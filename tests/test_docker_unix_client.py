@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from qingluo_console.collectors.docker import DockerUnixClient
 
 
@@ -55,3 +57,11 @@ def test_docker_unix_client_decodes_chunked_response(monkeypatch, tmp_path):
     payload = DockerUnixClient(socket_path=socket_path).get_json("/containers/json?all=1")
 
     assert payload[0]["Names"] == ["/mysql"]
+
+
+def test_docker_client_rejects_non_allowlisted_api_paths(tmp_path):
+    socket_path = tmp_path / "docker.sock"
+    socket_path.write_text("")
+
+    with pytest.raises(ValueError, match="not allowed"):
+        DockerUnixClient(socket_path=socket_path).get_json("/containers/mysql/stop")

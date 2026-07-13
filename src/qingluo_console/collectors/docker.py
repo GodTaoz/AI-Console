@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import socket
+import time
+import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
@@ -25,6 +27,8 @@ class DockerContainerSnapshot(BaseModel):
     status: Status
     health: str | None = None
     ports: list[DockerPort] = Field(default_factory=list)
+    core: bool = False
+    uptime_seconds: int | None = None
 
 
 class DockerIssue(BaseModel):
@@ -34,10 +38,17 @@ class DockerIssue(BaseModel):
     container: str | None = None
 
 
+class DockerCoreSummary(BaseModel):
+    expected: int = 0
+    present: int = 0
+    healthy: int = 0
+
+
 class DockerSnapshot(BaseModel):
     status: Status
     containers: list[DockerContainerSnapshot] = Field(default_factory=list)
     issues: list[DockerIssue] = Field(default_factory=list)
+    core_summary: DockerCoreSummary = Field(default_factory=DockerCoreSummary)
 
 
 class DockerUnixClient:
@@ -46,6 +57,7 @@ class DockerUnixClient:
         self.timeout = timeout
 
     def get_json(self, path: str) -> object:
+        _validate_read_path(path)
         if not self.socket_path.exists():
             raise FileNotFoundError(str(self.socket_path))
         request = f"GET {path} HTTP/1.1\r\nHost: docker\r\nConnection: close\r\n\r\n".encode()
@@ -64,6 +76,27 @@ class DockerUnixClient:
         if b"transfer-encoding: chunked" in headers.lower():
             body = _decode_chunked_body(body)
         return json.loads(body.decode("utf-8"))
+
+
+class DockerHttpClient:
+    def __init__(self, base_url: str, timeout: float = 5.0):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def get_json(self, path: str) -> object:
+        _validate_read_path(path)
+        request = urllib.request.Request(
+            self.base_url + path,
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+
+def _validate_read_path(path: str) -> None:
+    if path != "/containers/json?all=1":
+        raise ValueError("Docker API path is not allowed")
 
 
 def _decode_chunked_body(body: bytes) -> bytes:
@@ -133,8 +166,9 @@ def collect_docker_containers(
     client: object | None = None,
     core_names: list[str] | None = None,
     socket_path: str | Path = "/var/run/docker.sock",
+    base_url: str | None = None,
 ) -> DockerSnapshot:
-    docker_client = client or DockerUnixClient(socket_path=socket_path)
+    docker_client = client or (DockerHttpClient(base_url) if base_url else DockerUnixClient(socket_path=socket_path))
     try:
         payload = docker_client.get_json("/containers/json?all=1")
     except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError) as exc:
@@ -162,6 +196,10 @@ def collect_docker_containers(
         state = str(raw.get("State", "unknown"))
         status_text = str(raw.get("Status", ""))
         health = _health_from_status(status_text)
+        created = raw.get("Created")
+        uptime_seconds = None
+        if state == "running" and isinstance(created, (int, float)):
+            uptime_seconds = max(0, int(time.time() - created))
         containers.append(
             DockerContainerSnapshot(
                 name=name,
@@ -171,6 +209,8 @@ def collect_docker_containers(
                 status=_status_for_container(state, health),
                 health=health,
                 ports=_ports(raw.get("Ports")),
+                core=name in set(core_names or []),
+                uptime_seconds=uptime_seconds,
             )
         )
 
@@ -193,4 +233,14 @@ def collect_docker_containers(
     else:
         module_statuses = [ModuleStatus(name=c.name, status=c.status) for c in containers]
     module_statuses.extend(ModuleStatus(name=i.code, status=i.status) for i in issues)
-    return DockerSnapshot(status=overall_status(module_statuses), containers=containers, issues=issues)
+    core_containers = [container for container in containers if container.name in core_set]
+    return DockerSnapshot(
+        status=overall_status(module_statuses),
+        containers=containers,
+        issues=issues,
+        core_summary=DockerCoreSummary(
+            expected=len(core_set),
+            present=len(core_containers),
+            healthy=sum(container.status == Status.OK for container in core_containers),
+        ),
+    )

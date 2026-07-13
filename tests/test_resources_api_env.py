@@ -8,10 +8,18 @@ def test_resources_endpoint_uses_configured_host_roots(monkeypatch, tmp_path):
     proc_root = tmp_path / "host-proc"
     sys_root = tmp_path / "host-sys"
     network_status = tmp_path / "network-status.json"
+    os_release = tmp_path / "os-release"
+    hostname_path = tmp_path / "hostname"
+    ufw_root = tmp_path / "ufw"
     monkeypatch.setenv("QINGLUO_PROC_ROOT", str(proc_root))
     monkeypatch.setenv("QINGLUO_SYS_ROOT", str(sys_root))
     monkeypatch.setenv("QINGLUO_PRIMARY_INTERFACE", "eth-test")
     monkeypatch.setenv("QINGLUO_NETWORK_STATUS_PATH", str(network_status))
+    monkeypatch.setenv("QINGLUO_OS_RELEASE_PATH", str(os_release))
+    monkeypatch.setenv("QINGLUO_SYSTEM_SAMPLE_SECONDS", "0.25")
+    monkeypatch.setenv("QINGLUO_HOSTNAME_PATH", str(hostname_path))
+    monkeypatch.setenv("QINGLUO_HOST_IP", "192.0.2.10")
+    monkeypatch.setenv("QINGLUO_UFW_ROOT", str(ufw_root))
 
     calls = []
 
@@ -41,5 +49,10 @@ def test_resources_endpoint_uses_configured_host_roots(monkeypatch, tmp_path):
             "sys_root": sys_root,
             "mount_paths": [__import__("pathlib").Path("/"), __import__("pathlib").Path("/mnt/nas")],
             "primary_interface": "eth-test",
-        }
+            "os_release_path": os_release,
+            "sample_interval_seconds": 0.25,
+            "hostname_path": str(hostname_path),
+                "host_ip": "192.0.2.10",
+                "ufw_root": ufw_root,
+            }
     ]

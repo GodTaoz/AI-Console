@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import time
 import urllib.error
 import urllib.request
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
+from typing import Callable
 
 from pydantic import BaseModel, Field
 
@@ -98,6 +102,30 @@ def _safe_error(exc: Exception) -> str:
     return f"{type(exc).__name__}"
 
 
+def _public_account_id(auth_index: str) -> str:
+    return sha256(auth_index.encode()).hexdigest()[:16]
+
+
+def _account_email(value: str) -> str | None:
+    normalized = re.sub(r"\.json$", "", value, flags=re.IGNORECASE)
+    normalized = re.sub(r"-plus$", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"^codex-", "", normalized, flags=re.IGNORECASE)
+    match = re.fullmatch(r"([A-Z0-9._%+-]+)@([A-Z0-9.-]+\.[A-Z]{2,})", normalized, re.IGNORECASE)
+    if not match:
+        return None
+    local, domain = match.groups()
+    return f"{local}@{domain.lower()}"
+
+
+def _public_account_name(raw: dict[str, Any], provider: str, public_id: str) -> str:
+    candidates = [raw.get("email"), raw.get("auth_index"), raw.get("name")]
+    for candidate in candidates:
+        if candidate and (email := _account_email(str(candidate))):
+            return email
+    label = provider.upper() if provider else "AI"
+    return f"{label} {public_id[:6]}"
+
+
 def _account_status(raw: dict[str, Any]) -> Status:
     if raw.get("disabled") or raw.get("unavailable"):
         return Status.WARNING
@@ -162,11 +190,38 @@ def _api_call_payload(auth_index: str) -> dict[str, Any]:
     }
 
 
+def _fetch_quota_with_retry(
+    client: Any,
+    auth_index: str,
+    *,
+    attempts: int,
+    retry_delay_seconds: float,
+    sleep_fn: Callable[[float], None],
+) -> Any:
+    last_error: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return client.post_json("/v0/management/api-call", _api_call_payload(auth_index))
+        except Exception as exc:
+            last_error = exc
+            status_code = getattr(exc, "code", None)
+            transient = status_code in {502, 503, 504} or isinstance(exc, (TimeoutError, urllib.error.URLError))
+            if not transient or attempt == attempts - 1:
+                raise
+            if retry_delay_seconds > 0:
+                sleep_fn(retry_delay_seconds)
+    if last_error:
+        raise last_error
+
+
 def collect_cpa_quota(
     *,
     client: Any | None = None,
     management_key: str | None = None,
     base_url: str = "http://127.0.0.1:8317",
+    retry_attempts: int = 1,
+    retry_delay_seconds: float = 0,
+    sleep_fn: Callable[[float], None] = time.sleep,
 ) -> CpaQuotaSnapshot:
     key = management_key or os.getenv("QINGLUO_CPA_MANAGEMENT_KEY")
     if client is None and not key:
@@ -195,22 +250,48 @@ def collect_cpa_quota(
             continue
         auth_index = str(raw_item.get("auth_index") or raw_item.get("id") or raw_item.get("name") or "unknown")
         provider = str(raw_item.get("provider") or "unknown")
+        public_id = _public_account_id(auth_index)
+        display_name = _public_account_name(raw_item, provider, public_id)
+        display_email = _account_email(display_name)
         account = CpaQuotaAccount(
-            id=auth_index,
-            name=str(raw_item.get("name") or auth_index),
+            id=public_id,
+            name=display_name,
             provider=provider,
             status=_account_status(raw_item),
-            email=str(raw_item["email"]) if raw_item.get("email") else None,
+            email=display_email,
             success_count=int(raw_item["success"]) if raw_item.get("success") is not None else None,
             failed_count=int(raw_item["failed"]) if raw_item.get("failed") is not None else None,
             message=str(raw_item.get("status_message") or ""),
         )
-        if provider.lower() == "codex" and account.status is Status.OK:
+        if provider.lower() == "codex" and not raw_item.get("disabled"):
             try:
-                usage = _quota_body(cpa_client.post_json("/v0/management/api-call", _api_call_payload(auth_index)))
+                usage = _quota_body(
+                    _fetch_quota_with_retry(
+                        cpa_client,
+                        auth_index,
+                        attempts=retry_attempts,
+                        retry_delay_seconds=retry_delay_seconds,
+                        sleep_fn=sleep_fn,
+                    )
+                )
                 account = _apply_codex_usage(account, usage)
+                if account.used_percent is not None:
+                    account.status = Status.OK
+                    account.message = ""
+                else:
+                    account.status = Status.WARNING
+                    account.message = "Quota data is unavailable"
+                    issues.append(
+                        CpaQuotaIssue(
+                            code="cpa_quota_missing",
+                            message=f"Quota data is unavailable for {account.name}",
+                            status=Status.WARNING,
+                            account_id=account.id,
+                        )
+                    )
             except Exception as exc:
                 account.status = Status.UNKNOWN
+                account.message = "Quota request failed"
                 issues.append(
                     CpaQuotaIssue(
                         code="cpa_quota_fetch_failed",
@@ -219,6 +300,16 @@ def collect_cpa_quota(
                         account_id=account.id,
                     )
                 )
+        elif account.status is not Status.OK:
+            account.message = "Quota account is disabled"
+            issues.append(
+                CpaQuotaIssue(
+                    code="cpa_account_disabled",
+                    message=f"{account.name} is disabled",
+                    status=Status.WARNING,
+                    account_id=account.id,
+                )
+            )
         accounts.append(account)
 
     module_statuses = [ModuleStatus(name=account.id, status=account.status) for account in accounts]

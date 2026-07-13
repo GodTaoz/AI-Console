@@ -1,8 +1,10 @@
 import type {
   AiQuotaResponse,
+  AlertsResponse,
   CollectRunResponse,
   DockerResponse,
   HealthResponse,
+  MetricHistoryResponse,
   ResourcesResponse,
   SummaryResponse,
 } from '@/types'
@@ -34,6 +36,8 @@ export interface ApiClient {
   getResources: () => Promise<ResourcesResponse>
   getDocker: () => Promise<DockerResponse>
   getAiQuota: () => Promise<AiQuotaResponse>
+  getAlerts: () => Promise<AlertsResponse>
+  getMetricHistory: (metrics: string[]) => Promise<MetricHistoryResponse>
   runCollect: () => Promise<CollectRunResponse>
 }
 
@@ -61,14 +65,7 @@ async function readErrorBody(response: Response): Promise<unknown> {
 }
 
 function createRequestError(url: string, response: Response, body: unknown): ApiError {
-  const details =
-    typeof body === 'string'
-      ? body
-      : body && typeof body === 'object'
-        ? JSON.stringify(body)
-        : undefined
-  const suffix = details ? `: ${details}` : ''
-  return new ApiError(`Request failed with ${response.status} ${response.statusText}${suffix}`, {
+  return new ApiError(`Request failed with ${response.status} ${response.statusText}`, {
     url,
     status: response.status,
     statusText: response.statusText,
@@ -134,6 +131,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     getResources: () => requestJson<ResourcesResponse>('/api/resources'),
     getDocker: () => requestJson<DockerResponse>('/api/docker'),
     getAiQuota: () => requestJson<AiQuotaResponse>('/api/ai-quota'),
+    getAlerts: () => requestJson<AlertsResponse>('/api/alerts'),
+    getMetricHistory: (metrics) => requestJson<MetricHistoryResponse>(`/api/metrics/history?range=24h&metrics=${encodeURIComponent(metrics.join(','))}`),
     runCollect: () => requestJson<CollectRunResponse>('/api/collect/run', { method: 'POST' }),
   }
 }
@@ -145,5 +144,6 @@ export const getSummary = apiClient.getSummary
 export const getResources = apiClient.getResources
 export const getDocker = apiClient.getDocker
 export const getAiQuota = apiClient.getAiQuota
+export const getAlerts = apiClient.getAlerts
+export const getMetricHistory = apiClient.getMetricHistory
 export const runCollect = apiClient.runCollect
-

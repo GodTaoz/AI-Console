@@ -26,5 +26,6 @@ def test_collect_cpa_quota_accepts_auth_files_wrapped_in_files_key():
 
     assert snapshot.status is Status.OK
     assert len(snapshot.accounts) == 1
-    assert snapshot.accounts[0].id == "codex-a"
+    assert snapshot.accounts[0].id != "codex-a"
+    assert len(snapshot.accounts[0].id) == 16
     assert snapshot.accounts[0].used_percent == 10
