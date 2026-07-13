@@ -7,6 +7,10 @@
 - Phase 1：项目骨架、FastAPI health endpoint、SQLite schema、状态模型。
 - 后续 Phase 2 将按 TDD 实现 `system_collector`、`docker_collector`、`cpa_quota_collector`。
 
+## 技术规格
+
+项目技术规格说明书见：[`docs/technical-spec.md`](docs/technical-spec.md)。
+
 ## 本地开发
 
 ```bash
