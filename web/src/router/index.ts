@@ -5,6 +5,7 @@ export type AppRouteName =
   | 'hosts'
   | 'containers'
   | 'agents'
+  | 'agent-status'
   | 'ai-services'
   | 'network-storage'
   | 'alerts'
@@ -50,7 +51,16 @@ export const appRoutes: AppRoute[] = [
     path: '/agents',
     titleKey: 'pages.agents.title',
     descriptionKey: 'pages.agents.description',
+    statusKey: 'shell.liveData',
     component: defineAsyncComponent(() => import('@/pages/AgentsPage.vue')),
+  },
+  {
+    name: 'agent-status',
+    path: '/agents/status',
+    titleKey: 'pages.agentStatus.title',
+    descriptionKey: 'pages.agentStatus.description',
+    statusKey: 'shell.liveData',
+    component: defineAsyncComponent(() => import('@/pages/AgentStatusPage.vue')),
     showInNavigation: false,
   },
   {

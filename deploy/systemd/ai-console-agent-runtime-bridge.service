@@ -1,0 +1,15 @@
+[Unit]
+Description=AI-Console local agent runtime bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/ai-console/agent-runtime-bridge.env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/agent-runtime-bridge --socket %h/.local/state/ai-console/runtime-bridge.sock --token-file %h/.local/state/ai-console/token
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -22,6 +22,7 @@ const routeIconMap = {
   hosts: DesktopOutline,
   containers: CloudOutline,
   agents: AnalyticsOutline,
+  'agent-status': AnalyticsOutline,
   'ai-services': FlashOutline,
   'network-storage': CloudOutline,
   alerts: WarningOutline,
@@ -37,7 +38,7 @@ const navRoutes = computed(() =>
 )
 
 function isActive(path: string) {
-  return currentRoute.value.path === path
+  return currentRoute.value.path === path || (path === '/agents' && currentRoute.value.path.startsWith('/agents/'))
 }
 
 function selectRoute(path: string) {

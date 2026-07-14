@@ -9,6 +9,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from qingluo_console.agent_registry.api import get_service as get_agent_registry_service
+from qingluo_console.agent_registry.api import router as agent_registry_router
 from qingluo_console.collector_runner import redact_sensitive, run_collectors_once
 from qingluo_console.collectors.cpa_quota import collect_cpa_quota
 from qingluo_console.collectors.docker import collect_docker_containers
@@ -85,6 +87,8 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
 
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    app.include_router(agent_registry_router)
 
     def frontend_index_response():
         index_html = static_dir / "index.html"
@@ -206,6 +210,9 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/alerts")
     def alerts(limit: int = 100) -> dict[str, object]:
+        get_agent_registry_service().reconcile_alerts(
+            waiting_after_seconds=int(os.getenv("QINGLUO_AGENT_WAITING_ALERT_SECONDS", "1800"))
+        )
         events = read_alert_events(Path(os.getenv("QINGLUO_CONSOLE_DB", "/data/ai-console.sqlite3")), limit=limit)
         return {
             "status": "ok",

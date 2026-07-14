@@ -15,6 +15,12 @@ REQUIRED_TABLES = {
     "events",
     "collection_runs",
     "alert_events",
+    "agents",
+    "agent_sessions",
+    "agent_discovery_status",
+    "agent_audit_events",
+    "agent_messages",
+    "agent_runtime_operations",
 }
 
 SCHEMA_SQL = """
@@ -86,6 +92,111 @@ ON metric_samples(metric_name, sampled_at);
 
 CREATE INDEX IF NOT EXISTS idx_alert_events_state_seen
 ON alert_events(state, last_seen_at);
+
+CREATE TABLE IF NOT EXISTS agents (
+    agent_id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    runtime TEXT NOT NULL,
+    purpose TEXT NOT NULL DEFAULT '',
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    session_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    external_session_id TEXT,
+    parent_session_id TEXT,
+    kind TEXT NOT NULL,
+    purpose TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    registration_source TEXT NOT NULL DEFAULT 'self_reported',
+    workspace_id TEXT,
+    entry_type TEXT NOT NULL DEFAULT 'none',
+    entry_data_json TEXT NOT NULL DEFAULT '{}',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    started_at TEXT NOT NULL,
+    status_changed_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    carrier_status TEXT NOT NULL DEFAULT 'unknown',
+    carrier_observed_at TEXT,
+    carrier_details_json TEXT NOT NULL DEFAULT '{}',
+    ended_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    archived_by TEXT,
+    source_deleted_at TEXT,
+    source_delete_error TEXT,
+    FOREIGN KEY(agent_id) REFERENCES agents(agent_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_status_seen
+ON agent_sessions(status, last_seen_at);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_updated
+ON agent_sessions(agent_id, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_parent
+ON agent_sessions(parent_session_id);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_external
+ON agent_sessions(agent_id, external_session_id);
+
+CREATE TABLE IF NOT EXISTS agent_discovery_status (
+    source_id TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL,
+    last_result TEXT NOT NULL,
+    last_scan_at TEXT NOT NULL,
+    interval_seconds INTEGER NOT NULL,
+    discovered_count INTEGER NOT NULL DEFAULT 0,
+    message TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    session_id TEXT,
+    result TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_audit_session_time
+ON agent_audit_events(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS agent_messages (
+    message_id TEXT PRIMARY KEY,
+    from_session_id TEXT,
+    to_session_id TEXT NOT NULL,
+    message_type TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'unread',
+    created_at TEXT NOT NULL,
+    read_at TEXT,
+    acked_at TEXT,
+    expires_at TEXT,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_messages_inbox
+ON agent_messages(to_session_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS agent_runtime_operations (
+    run_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    runtime TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    status TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    error_code TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_runtime_operations_session_time
+ON agent_runtime_operations(session_id, started_at);
 """
 
 
@@ -98,6 +209,23 @@ def init_db(path: str | Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
         conn.executescript(SCHEMA_SQL)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(agent_sessions)")}
+        if "registration_source" not in columns:
+            conn.execute(
+                "ALTER TABLE agent_sessions ADD COLUMN registration_source TEXT NOT NULL DEFAULT 'self_reported'"
+            )
+        if "status_changed_at" not in columns:
+            conn.execute("ALTER TABLE agent_sessions ADD COLUMN status_changed_at TEXT")
+            conn.execute("UPDATE agent_sessions SET status_changed_at = updated_at WHERE status_changed_at IS NULL")
+        if "carrier_status" not in columns:
+            conn.execute("ALTER TABLE agent_sessions ADD COLUMN carrier_status TEXT NOT NULL DEFAULT 'unknown'")
+        if "carrier_observed_at" not in columns:
+            conn.execute("ALTER TABLE agent_sessions ADD COLUMN carrier_observed_at TEXT")
+        if "carrier_details_json" not in columns:
+            conn.execute("ALTER TABLE agent_sessions ADD COLUMN carrier_details_json TEXT NOT NULL DEFAULT '{}'")
+        for column in ("archived_at", "archived_by", "source_deleted_at", "source_delete_error"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE agent_sessions ADD COLUMN {column} TEXT")
         conn.commit()
 
 
@@ -270,7 +398,13 @@ def cleanup_metric_samples(path: str | Path, *, older_than: datetime) -> int:
         return max(0, int(cursor.rowcount))
 
 
-def reconcile_alert_events(path: str | Path, alerts: list[dict[str, object]], *, observed_at: str) -> None:
+def reconcile_alert_events(
+    path: str | Path,
+    alerts: list[dict[str, object]],
+    *,
+    observed_at: str,
+    managed_sources: set[str] | None = None,
+) -> None:
     init_db(path)
     active_fingerprints = {str(alert["fingerprint"]) for alert in alerts}
     with sqlite3.connect(path) as conn:
@@ -287,7 +421,10 @@ def reconcile_alert_events(path: str | Path, alerts: list[dict[str, object]], *,
                     state = 'active',
                     last_seen_at = excluded.last_seen_at,
                     resolved_at = NULL,
-                    occurrence_count = alert_events.occurrence_count + 1,
+                    occurrence_count = CASE
+                        WHEN alert_events.state = 'resolved' THEN alert_events.occurrence_count + 1
+                        ELSE alert_events.occurrence_count
+                    END,
                     details_json = excluded.details_json
                 """,
                 (
@@ -302,20 +439,30 @@ def reconcile_alert_events(path: str | Path, alerts: list[dict[str, object]], *,
                 ),
             )
 
+        source_clause = ""
+        source_parameters: list[str] = []
+        if managed_sources is not None:
+            if not managed_sources:
+                conn.commit()
+                return
+            source_placeholders = ",".join("?" for _ in managed_sources)
+            source_clause = f" AND source IN ({source_placeholders})"
+            source_parameters = sorted(managed_sources)
+
         if active_fingerprints:
             placeholders = ",".join("?" for _ in active_fingerprints)
             conn.execute(
                 f"""
                 UPDATE alert_events
                 SET state = 'resolved', resolved_at = ?
-                WHERE state = 'active' AND fingerprint NOT IN ({placeholders})
+                WHERE state = 'active'{source_clause} AND fingerprint NOT IN ({placeholders})
                 """,
-                (observed_at, *sorted(active_fingerprints)),
+                (observed_at, *source_parameters, *sorted(active_fingerprints)),
             )
         else:
             conn.execute(
-                "UPDATE alert_events SET state = 'resolved', resolved_at = ? WHERE state = 'active'",
-                (observed_at,),
+                f"UPDATE alert_events SET state = 'resolved', resolved_at = ? WHERE state = 'active'{source_clause}",
+                (observed_at, *source_parameters),
             )
         conn.commit()
 

@@ -8,6 +8,11 @@ assertUiMessageParity()
 const messages = {
   'zh-CN': {
     ...uiMessages['zh-CN'],
+    agentUi: {
+      ...uiMessages['zh-CN'].agentUi,
+      moduleNavigation: '智能体功能', chatView: '会话', statusView: '状态监控', collapseSessions: '折叠会话列表', expandSessions: '展开会话列表', sessionName: '会话名称', discoverySource: '发现来源', openChat: '打开会话', problemSessions: '失败或失联', runtimeHealth: '运行连接', runtimeHealthHint: '发现器与运行时适配器的最新状态。', recentSessions: '最近会话', recentSessionsHint: '未归档会话按最近活动时间排序。', thinking: '正在思考', toolRunning: '正在调用工具', waitingApproval: '等待你的确认', responding: '正在生成回复', phaseElapsed: '{seconds} 秒', attachFile: '添加附件', send: '发送', inputHint: 'Ctrl + Enter 发送',
+    },
+    agentCommands: '建议命令',
     app: {
       title: 'AI-Console',
       subtitle: 'AI 工作站健康与额度预警',
@@ -96,9 +101,9 @@ const messages = {
       },
       agents: {
         title: '智能体',
-        description: '预留智能体管理入口，后续会接入注册信息、任务执行与日志流。',
+        description: '统一查看 Hermes 与 Codex 会话历史，在保留原权限的前提下继续对话和管理会话。',
         kicker: '智能体',
-        intro: '预留智能体管理入口，后续会接入注册信息、任务执行与日志流。',
+        intro: '查看真实会话历史、继续对话，并管理归档、审批和任务投递。',
         sections: {
           registry: '注册中心',
           registryCopy: '展示智能体在线情况、版本与归属关系。',
@@ -107,6 +112,10 @@ const messages = {
           logs: '运行日志',
           logsCopy: '展示智能体输出、错误与诊断信息。',
         },
+      },
+      agentStatus: {
+        title: '智能体状态',
+        description: '查看本机智能体会话数量、生命周期状态、发现服务与运行时连接情况。',
       },
       aiServices: {
         title: 'AI 服务',
@@ -178,6 +187,11 @@ const messages = {
   },
   'en-US': {
     ...uiMessages['en-US'],
+    agentUi: {
+      ...uiMessages['en-US'].agentUi,
+      moduleNavigation: 'Agent views', chatView: 'Conversations', statusView: 'Status monitor', collapseSessions: 'Collapse session list', expandSessions: 'Expand session list', sessionName: 'Session name', discoverySource: 'Discovery source', openChat: 'Open chat', problemSessions: 'Failed or lost', runtimeHealth: 'Runtime connectivity', runtimeHealthHint: 'Latest discovery and runtime adapter status.', recentSessions: 'Recent sessions', recentSessionsHint: 'Unarchived sessions ordered by recent activity.', thinking: 'Thinking', toolRunning: 'Using a tool', waitingApproval: 'Waiting for your approval', responding: 'Generating a response', phaseElapsed: '{seconds}s', attachFile: 'Add attachment', send: 'Send', inputHint: 'Ctrl + Enter to send',
+    },
+    agentCommands: 'Suggested commands',
     app: {
       title: 'AI-Console',
       subtitle: 'AI workstation health and quota alerts',
@@ -266,9 +280,9 @@ const messages = {
       },
       agents: {
         title: 'Agents',
-        description: 'Reserved for agent registration, task execution, and log streams once the backend is ready.',
+        description: 'Review Hermes and Codex history, continue live sessions with inherited permissions, and manage their lifecycle.',
         kicker: 'Agents',
-        intro: 'Reserved for agent registration, task execution, and log streams once the backend is ready.',
+        intro: 'Review live history, continue conversations, and manage archives, approvals, and task delivery.',
         sections: {
           registry: 'Registry',
           registryCopy: 'A place for online status, versions, and ownership.',
@@ -277,6 +291,10 @@ const messages = {
           logs: 'Runtime logs',
           logsCopy: 'A place for agent output, errors, and diagnostics.',
         },
+      },
+      agentStatus: {
+        title: 'Agent Status',
+        description: 'Monitor local agent session counts, lifecycle state, discovery services, and runtime connectivity.',
       },
       aiServices: {
         title: 'AI Services',

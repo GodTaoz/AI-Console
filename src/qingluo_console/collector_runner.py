@@ -258,7 +258,12 @@ def run_collectors_once(*, db_path: str | Path | None = None) -> dict[str, objec
         overall = overall_status(statuses)
         insert_metric_samples(target_db, _metric_samples(payloads), sampled_at=completed_at)
         _maybe_cleanup_metric_samples(target_db, now=datetime.fromisoformat(completed_at))
-        reconcile_alert_events(target_db, _alerts(payloads), observed_at=completed_at)
+        reconcile_alert_events(
+            target_db,
+            _alerts(payloads),
+            observed_at=completed_at,
+            managed_sources=set(payloads),
+        )
         run_id = record_collection_run(
             target_db,
             status=overall,

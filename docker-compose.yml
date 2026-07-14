@@ -11,6 +11,7 @@ services:
       - "8010:8010"
     volumes:
       - ${QINGLUO_DATA_DIR:-/mnt/nas/docker/ai-console/data}:/data
+      - ${QINGLUO_AGENT_BRIDGE_DIR:-/home/zhangtao/.local/state/ai-console}:/run/agent-bridge:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc/os-release:/host/etc/os-release:ro
@@ -39,6 +40,11 @@ services:
       QINGLUO_SCHEDULER_ENABLED: "true"
       QINGLUO_COLLECTION_INTERVAL_SECONDS: "60"
       QINGLUO_STALE_AFTER_SECONDS: "180"
+      QINGLUO_AGENT_LOST_AFTER_SECONDS: ${QINGLUO_AGENT_LOST_AFTER_SECONDS:-180}
+      QINGLUO_AGENT_WAITING_ALERT_SECONDS: ${QINGLUO_AGENT_WAITING_ALERT_SECONDS:-1800}
+      QINGLUO_AGENT_BRIDGE_SOCKET: /run/agent-bridge/runtime-bridge.sock
+      QINGLUO_AGENT_BRIDGE_TOKEN_FILE: /run/agent-bridge/token
+      QINGLUO_AGENT_BRIDGE_TIMEOUT_SECONDS: ${QINGLUO_AGENT_BRIDGE_TIMEOUT_SECONDS:-30}
       QINGLUO_METRIC_RETENTION_DAYS: "7"
       QINGLUO_SERVE_LATEST_ONLY: "true"
     depends_on:
