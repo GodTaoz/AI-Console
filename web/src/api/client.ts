@@ -15,6 +15,7 @@ import type {
   AgentSession,
   AgentSessionListResponse,
   AgentTurnStartResponse,
+  AgentTurnStatusResponse,
   AgentTreeResponse,
   AlertsResponse,
   CollectRunResponse,
@@ -66,7 +67,8 @@ export interface ApiClient {
   getAgentRuntimeStatus: () => Promise<AgentRuntimeStatusResponse>
   getAgentHistory: (sessionId: string, cursor?: string | null) => Promise<AgentHistoryResponse>
   searchAgentHistory: (sessionId: string, query: string) => Promise<AgentHistorySearchResponse>
-  startAgentTurn: (sessionId: string, text: string, model?: string | null, attachments?: AgentAttachmentPayload[]) => Promise<AgentTurnStartResponse>
+  startAgentTurn: (sessionId: string, text: string, model?: string | null, reasoningEffort?: string | null, attachments?: AgentAttachmentPayload[]) => Promise<AgentTurnStartResponse>
+  getAgentTurnStatus: (runId: string) => Promise<AgentTurnStatusResponse>
   getAgentModels: (sessionId: string) => Promise<AgentModelListResponse>
   renameAgentSession: (sessionId: string, name: string) => Promise<AgentSession>
   interruptAgentTurn: (runId: string) => Promise<{ run_id: string; status: string }>
@@ -185,7 +187,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     getAgentRuntimeStatus: () => requestJson<AgentRuntimeStatusResponse>('/api/v1/agent-runtime/status'),
     getAgentHistory: (sessionId, cursor) => requestJson<AgentHistoryResponse>(`/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/history?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { headers: { 'X-Agent-Source': 'web' } }),
     searchAgentHistory: (sessionId, query) => requestJson<AgentHistorySearchResponse>(`/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/history/search?q=${encodeURIComponent(query)}&limit=50`, { headers: { 'X-Agent-Source': 'web' } }),
-    startAgentTurn: (sessionId, text, model = null, attachments = []) => requestJson<AgentTurnStartResponse>(`/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/turns`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Agent-Source': 'web' }, body: JSON.stringify({ text, model, attachments }) }),
+    startAgentTurn: (sessionId, text, model = null, reasoningEffort = null, attachments = []) => requestJson<AgentTurnStartResponse>(`/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/turns`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Agent-Source': 'web' }, body: JSON.stringify({ text, model, reasoning_effort: reasoningEffort, attachments }) }),
+    getAgentTurnStatus: (runId) => requestJson<AgentTurnStatusResponse>(`/api/v1/agent-turns/${encodeURIComponent(runId)}`),
     getAgentModels: (sessionId) => requestJson<AgentModelListResponse>(`/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/models`),
     renameAgentSession: (sessionId, name) => requestJson<AgentSession>(`/api/v1/agent-sessions/${encodeURIComponent(sessionId)}/name`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Agent-Source': 'web' }, body: JSON.stringify({ name }) }),
     interruptAgentTurn: (runId) => requestJson<{ run_id: string; status: string }>(`/api/v1/agent-turns/${encodeURIComponent(runId)}/interrupt`, { method: 'POST', headers: { 'X-Agent-Source': 'web' } }),
@@ -219,6 +222,7 @@ export const getAgentRuntimeStatus = apiClient.getAgentRuntimeStatus
 export const getAgentHistory = apiClient.getAgentHistory
 export const searchAgentHistory = apiClient.searchAgentHistory
 export const startAgentTurn = apiClient.startAgentTurn
+export const getAgentTurnStatus = apiClient.getAgentTurnStatus
 export const getAgentModels = apiClient.getAgentModels
 export const renameAgentSession = apiClient.renameAgentSession
 export const interruptAgentTurn = apiClient.interruptAgentTurn

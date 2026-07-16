@@ -101,6 +101,18 @@ const routeByPath = new Map(appRoutes.map((route) => [route.path, route]))
 const routeByName = new Map(appRoutes.map((route) => [route.name, route]))
 
 export const currentRoute = shallowRef<AppRoute>(defaultRoute)
+const lastAgentRouteStorageKey = 'ai-console-agent-last-route'
+
+function rememberAgentRoute(route: AppRoute) {
+  if (typeof window !== 'undefined' && route.path.startsWith('/agents')) {
+    window.sessionStorage.setItem(lastAgentRouteStorageKey, route.path)
+  }
+}
+
+export function lastAgentRoutePath() {
+  if (typeof window === 'undefined') return '/agents'
+  return window.sessionStorage.getItem(lastAgentRouteStorageKey) === '/agents/status' ? '/agents/status' : '/agents'
+}
 
 function normalizePath(pathname: string) {
   const next = pathname.replace(/\/+$/, '')
@@ -120,6 +132,7 @@ export function navigate(target: string | AppRouteName, replace = false) {
   }
 
   currentRoute.value = route
+  rememberAgentRoute(route)
 }
 
 export function initializeRouter() {
@@ -129,6 +142,7 @@ export function initializeRouter() {
 
   const initialRoute = resolveRoute(window.location.pathname)
   currentRoute.value = initialRoute
+  rememberAgentRoute(initialRoute)
 
   if (normalizePath(window.location.pathname) !== initialRoute.path) {
     window.history.replaceState({}, '', initialRoute.path)
@@ -136,5 +150,6 @@ export function initializeRouter() {
 
   window.addEventListener('popstate', () => {
     currentRoute.value = resolveRoute(window.location.pathname)
+    rememberAgentRoute(currentRoute.value)
   })
 }

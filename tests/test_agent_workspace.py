@@ -10,7 +10,7 @@ from qingluo_console.agent_registry.api import get_runtime_client
 from qingluo_console.main import create_app
 from qingluo_console.runtime_bridge import adapters as adapter_module
 from qingluo_console.runtime_bridge.adapters import AdapterError, AdapterRun, CodexAdapter, HermesAdapter, sanitize_history
-from qingluo_console.runtime_bridge.app import RuntimeManager, create_bridge_app
+from qingluo_console.runtime_bridge.app import RunState, RuntimeManager, create_bridge_app
 
 
 SESSION_ID = "codex-workspace-session"
@@ -48,7 +48,7 @@ class FakeRuntimeClient:
         return {"run_id": "run-1", "status": "running"}
 
     async def models(self, **kwargs):
-        return {"models": [{"id": "gpt-test", "label": "GPT Test", "provider": "test", "supports_images": True, "is_current": True, "is_default": True}]}
+        return {"models": [{"id": "gpt-test", "label": "GPT Test", "provider": "test", "supports_images": True, "is_current": True, "is_default": True, "reasoning_efforts": ["low", "high"], "default_reasoning_effort": "low"}]}
 
     async def rename(self, **kwargs):
         self.renamed = kwargs["name"]
@@ -92,12 +92,15 @@ def test_workspace_history_turn_archive_and_delete(tmp_path, monkeypatch):
     turn = client.post(f"/api/v1/agent-sessions/{SESSION_ID}/turns", json={
         "text": "continue",
         "model": "gpt-test",
+        "reasoning_effort": "high",
         "attachments": [{"name": "screen.png", "media_type": "image/png", "data_base64": "aGVsbG8="}],
     })
     assert turn.status_code == 200
     assert turn.json()["run_id"] == "run-1"
     assert runtime.last_turn["model"] == "gpt-test"
+    assert runtime.last_turn["reasoning_effort"] == "high"
     assert runtime.last_turn["attachments"][0]["name"] == "screen.png"
+    assert client.get("/api/v1/agent-turns/run-1").json()["status"] == "running"
     events = client.get("/api/v1/agent-turns/run-1/events")
     assert events.status_code == 200
     assert '"phase":"thinking"' in events.text
@@ -106,6 +109,7 @@ def test_workspace_history_turn_archive_and_delete(tmp_path, monkeypatch):
         assert conn.execute("SELECT status FROM agent_runtime_operations WHERE run_id = 'run-1'").fetchone()[0] == "completed"
     assert client.post("/api/v1/agent-turns/run-1/interrupt").status_code == 200
     assert client.post("/api/v1/agent-turns/run-1/approvals/a1", json={"decision": "deny"}).status_code == 200
+    assert client.get("/api/v1/agent-turns/run-1").json()["status"] == "completed"
 
     archived = client.post(f"/api/v1/agent-sessions/{SESSION_ID}/archive")
     assert archived.status_code == 200
@@ -131,6 +135,7 @@ def test_turn_requires_text_or_attachment_and_rejects_unsafe_names(tmp_path, mon
     assert client.put(f"/api/v1/agent-sessions/{SESSION_ID}", json=registration_payload()).status_code == 200
 
     assert client.post(f"/api/v1/agent-sessions/{SESSION_ID}/turns", json={"text": "", "attachments": []}).status_code == 422
+    assert client.post(f"/api/v1/agent-sessions/{SESSION_ID}/turns", json={"text": "continue", "reasoning_effort": "unlimited"}).status_code == 422
     assert client.post(f"/api/v1/agent-sessions/{SESSION_ID}/turns", json={
         "text": "",
         "attachments": [{"name": "../secret.txt", "media_type": "text/plain", "data_base64": "aGVsbG8="}],
@@ -158,6 +163,33 @@ def test_bridge_requires_token():
     assert client.get("/v1/status", headers={"Authorization": "Bearer test-token"}).status_code == 200
 
 
+def test_bridge_records_approval_resolution_event():
+    class ApprovalAdapter:
+        async def approve(self, handle, approval_id, decision):
+            handle.pending_approvals.pop(approval_id, None)
+
+    manager = RuntimeManager(adapters={"codex": ApprovalAdapter()})
+    handle = AdapterRun("codex", EXTERNAL_ID, pending_approvals={"approval-1": 1})
+    state = RunState(run_id="run-approval", handle=handle)
+    manager.runs[state.run_id] = state
+    app = create_bridge_app(manager=manager, token="test-token")
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/turns/run-approval/approvals/approval-1",
+        headers={"Authorization": "Bearer test-token"},
+        json={"decision": "approve"},
+    )
+
+    assert response.status_code == 200
+    assert state.events == [{
+        "sequence": 1,
+        "type": "approval_resolved",
+        "approval_id": "approval-1",
+        "decision": "approve",
+    }]
+
+
 def test_codex_turn_closes_runtime_client_when_start_fails(monkeypatch):
     class FailingCodexClient:
         notification_handler = None
@@ -182,7 +214,7 @@ def test_codex_turn_closes_runtime_client_when_start_fails(monkeypatch):
         async def emit(_event):
             return None
 
-        await CodexAdapter().run_turn(AdapterRun("codex", EXTERNAL_ID), EXTERNAL_ID, "continue", emit)
+        await CodexAdapter().run_turn(AdapterRun("codex", EXTERNAL_ID), EXTERNAL_ID, "continue", emit, reasoning_effort="high")
 
     try:
         asyncio.run(run())
@@ -191,6 +223,79 @@ def test_codex_turn_closes_runtime_client_when_start_fails(monkeypatch):
     else:
         raise AssertionError("expected AdapterError")
     assert client.closed is True
+
+
+def test_codex_turn_resumes_thread_before_starting_turn(monkeypatch):
+    class RecordingCodexClient:
+        notification_handler = None
+        request_handler = None
+        calls = []
+
+        async def start(self):
+            return None
+
+        async def request(self, method, params):
+            self.calls.append((method, params))
+            if method == "thread/resume":
+                return {"thread": {"id": EXTERNAL_ID}}
+            if method == "turn/start":
+                await self.notification_handler("turn/completed", {"turn": {"status": "completed"}})
+                return {"turn": {"id": "turn-1"}}
+            return {}
+
+        async def close(self):
+            return None
+
+    client = RecordingCodexClient()
+    monkeypatch.setattr(adapter_module, "CodexRpcClient", lambda: client)
+
+    async def run():
+        async def emit(_event):
+            return None
+
+        await CodexAdapter().run_turn(AdapterRun("codex", EXTERNAL_ID), EXTERNAL_ID, "continue", emit, reasoning_effort="high")
+
+    asyncio.run(run())
+    assert client.calls[0] == ("thread/resume", {"threadId": EXTERNAL_ID})
+    assert client.calls[1][0] == "turn/start"
+    assert client.calls[1][1]["threadId"] == EXTERNAL_ID
+    assert client.calls[1][1]["effort"] == "high"
+
+
+def test_codex_client_only_forwards_allowlisted_auth_environment(monkeypatch):
+    captured = {}
+
+    class FakeProcess:
+        stdin = None
+        stdout = None
+
+    async def fake_subprocess(*args, **kwargs):
+        captured.update(kwargs["env"])
+        return FakeProcess()
+
+    async def fake_request(self, method, params):
+        return {}
+
+    async def fake_read(self):
+        return None
+
+    async def fake_notify(self, method, params):
+        return None
+
+    monkeypatch.setenv("CPA_API_KEY", "runtime-secret")
+    monkeypatch.setenv("UNRELATED_SECRET", "must-not-be-forwarded")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_subprocess)
+    monkeypatch.setattr(adapter_module.CodexRpcClient, "request", fake_request)
+    monkeypatch.setattr(adapter_module.CodexRpcClient, "_read", fake_read)
+    monkeypatch.setattr(adapter_module.CodexRpcClient, "notify", fake_notify)
+
+    async def run():
+        client = adapter_module.CodexRpcClient()
+        await client.start()
+
+    asyncio.run(run())
+    assert captured["CPA_API_KEY"] == "runtime-secret"
+    assert "UNRELATED_SECRET" not in captured
 
 
 def test_hermes_turn_closes_runtime_client_when_model_requires_confirmation(monkeypatch, tmp_path):

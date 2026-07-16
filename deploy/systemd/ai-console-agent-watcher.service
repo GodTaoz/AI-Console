@@ -7,7 +7,8 @@ Wants=network-online.target
 Type=simple
 EnvironmentFile=-%h/.config/ai-console/agent-watcher.env
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/.local/bin/agentctl bootstrap-local --watch --interval 60 --include-hermes --hermes-source telegram --hermes-source cli --hermes-limit 20
+UnsetEnvironment=QINGLUO_AGENT_THREAD_NAME QINGLUO_AGENT_SESSION_PURPOSE
+ExecStart=%h/.local/bin/agentctl bootstrap-local --watch --interval 60 --codex-source auto --codex-limit 20 --all --include-hermes --hermes-source telegram --hermes-source cli --hermes-limit 20
 Restart=on-failure
 RestartSec=10
 

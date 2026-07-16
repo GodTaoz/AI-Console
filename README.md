@@ -35,10 +35,10 @@ uv run agentctl list
 uv run agentctl tree
 ```
 
-持续刷新已发现的 Codex 会话：
+持续刷新最近 20 条 Codex 会话：
 
 ```bash
-uv run agentctl bootstrap-local --thread-name ai-console --watch --interval 60
+uv run agentctl bootstrap-local --codex-source auto --codex-limit 20 --all --watch --interval 60
 ```
 
 只读发现本机 Hermes Telegram/CLI 会话：
@@ -56,7 +56,7 @@ Hermes `sessions list` 是历史索引而不是心跳源，因此这类 discover
 ```bash
 uv tool install --force --reinstall --refresh-package ai-console .
 mkdir -p ~/.config/ai-console ~/.config/systemd/user
-printf 'QINGLUO_AGENT_THREAD_NAME=ai-console\nQINGLUO_AGENT_SESSION_PURPOSE=AI-Console implementation session\n' > ~/.config/ai-console/agent-watcher.env
+printf 'QINGLUO_AGENT_REGISTRY_URL=http://127.0.0.1:8010\n' > ~/.config/ai-console/agent-watcher.env
 install -m 0644 deploy/systemd/ai-console-agent-watcher.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now ai-console-agent-watcher.service
@@ -71,7 +71,7 @@ systemctl --user start ai-console-agent-watcher.service
 journalctl --user -u ai-console-agent-watcher.service
 ```
 
-项目提供的 systemd unit 显式启用 Hermes 发现，每个 `telegram`、`cli` 来源最多读取 20 条，同时刷新 Codex 索引。CLI 的 `bootstrap-local` 默认仍只发现 Codex，只有添加 `--include-hermes` 才会接入 Hermes，避免普通命令意外导入历史会话。
+项目提供的 systemd unit 使用 Codex `app-server thread/list` 只读发现最近 20 条本机会话，并显式启用 Hermes 发现，每个 `telegram`、`cli` 来源最多读取 20 条。Codex app-server 不可用时自动回退 `session_index.jsonl`。CLI 的 `bootstrap-local` 默认仍使用旧索引且只发现一条；只有显式选择 `--codex-source auto --all` 才会批量发现，避免普通命令意外导入大量历史会话。
 
 watcher 每轮还会运行 `agentctl reconcile-local` 的等价流程，只读检查已注册的 tmux、process 和 cron carrier。tmux 使用固定 `list-panes` 查询；process 使用 `/proc/PID/stat` 的 start time 防止 PID 重用误判；cron 当前明确显示“不支持”，不会读取或执行用户 crontab。
 
@@ -82,7 +82,7 @@ uv run agentctl register --runtime hermes --external-session-id SESSION_ID --pur
 uv run agentctl heartbeat hermes-SESSION_ID --status active
 ```
 
-Codex 发现只读取 `$CODEX_HOME/session_index.jsonl`（默认 `~/.codex/session_index.jsonl`）中的会话 ID、名称和更新时间，不读取 `history.jsonl` 或对话内容。Hermes 发现使用固定的 `hermes sessions list --source telegram|cli --limit N` 参数，只保存 ID、标题、来源和 Last Active。
+Codex 持久 watcher 优先调用固定的 `codex app-server` `thread/list` 方法，只保存会话 ID、名称和更新时间；不可用时回退 `$CODEX_HOME/session_index.jsonl`。两种方式都不读取 `history.jsonl`、prompt 或完整对话内容。Hermes 发现使用固定的 `hermes sessions list --source telegram|cli --limit N` 参数，只保存 ID、标题、来源和 Last Active。
 
 智能体告警规则：失联和长期等待为 warning，明确失败为 critical；默认等待阈值为 1800 秒，可通过 `QINGLUO_AGENT_WAITING_ALERT_SECONDS` 调整。同一会话同一状态使用固定 fingerprint 去重，恢复后保留已解决记录。
 
@@ -119,13 +119,17 @@ systemctl --user enable --now ai-console-agent-runtime-bridge.service
 systemctl --user status ai-console-agent-runtime-bridge.service
 ```
 
+若 Codex 的模型提供方依赖 `CPA_API_KEY`，请将该变量写入权限为 `0600` 的
+`~/.config/ai-console/agent-runtime-bridge.env` 后重启 Bridge。Bridge 只将该变量
+透传给固定的 `codex app-server` 子进程，不记录、不返回，也不会挂载进容器。
+
 在 `.env` 中将 `QINGLUO_AGENT_BRIDGE_DIR` 设置为宿主机的 `~/.local/state/ai-console` 绝对路径，然后重新创建容器。Codex adapter 使用固定的 `codex app-server --stdio` 协议，不修改原会话权限。
 
 Hermes adapter 使用本机 Hermes 安装目录中的 stdio JSON-RPC gateway，不需要向容器暴露端口或 Dashboard token。Bridge 只发送固定白名单方法，不接受网页提交的 shell、argv 或环境变量。
 
 `/agents` 是默认会话工作区，`/agents/status` 展示活动、空闲、等待、失败/失联会话数量以及发现器和 Runtime Bridge 状态。两者通过智能体模块内部导航切换，不增加主侧边栏入口。
 
-会话工作区读取源历史并直接提交新 turn；支持选择运行时实际提供的模型、修改源会话名称，以及发送图片或文件附件。附件一次最多 5 个、单个 10 MB、合计 20 MB，只在 Bridge 临时目录中保存到当前 turn 结束。“任务投递”仍是独立 SQLite inbox，不会自动进入智能体上下文。归档仅在 AI-Console 本地隐藏，可恢复；永久删除要求输入完整外部 Session ID，并调用运行时的源删除接口。
+会话工作区读取源历史并直接提交新 turn；支持选择运行时实际提供的模型与思考强度、查看 0.1 秒精度的阶段/思考耗时、修改源会话名称，以及发送图片或文件附件。思考强度来自运行时模型能力；不支持真正关闭思考的模型不会伪造“关闭”选项。附件一次最多 5 个、单个 10 MB、合计 20 MB，只在 Bridge 临时目录中保存到当前 turn 结束。“任务与收件箱”提供两个明确动作：发送并执行会通过 Runtime Bridge 在源会话启动新 turn；仅保存到收件箱仍只写入 SQLite，不会自动进入智能体上下文。归档仅在 AI-Console 本地隐藏，可恢复；永久删除要求输入完整外部 Session ID，并调用运行时的源删除接口。
 
 状态页会明确列出 `codex-local`、`hermes-cli`、`hermes-telegram` 等发现源。桌面端会话列表可拖动调整宽度或完全折叠，偏好保存在浏览器 LocalStorage；移动端使用抽屉选择会话。删除成功后页面立即从本地列表移除会话，再从 API 对账刷新。
 

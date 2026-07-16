@@ -21,6 +21,7 @@ from qingluo_console.agent_registry.models import (
     AgentHistorySearchResponse,
     AgentTurnStartRequest,
     AgentTurnStartResponse,
+    AgentTurnStatusResponse,
     AgentApprovalRequest,
     AgentArchiveResponse,
     AgentSourceDeleteRequest,
@@ -286,6 +287,7 @@ async def start_turn(
             external_session_id=session.external_session_id or "",
             text=request.text,
             model=request.model,
+            reasoning_effort=request.reasoning_effort,
             attachments=[item.model_dump() for item in request.attachments],
         )
         service.create_runtime_operation(run_id=str(payload["run_id"]), session_id=session_id, runtime=session.agent.runtime)
@@ -338,6 +340,19 @@ async def rename_runtime_session(
     except RuntimeBridgeError as exc:
         service.audit_action("session_rename", session_id, exc.error_code, source)
         raise bridge_error(exc) from None
+
+
+@router.get("/agent-turns/{run_id}", response_model=AgentTurnStatusResponse)
+def get_turn_status(run_id: str) -> AgentTurnStatusResponse:
+    operation = get_service().get_runtime_operation(run_id)
+    if not operation:
+        raise HTTPException(status_code=404, detail="Runtime operation was not found")
+    return AgentTurnStatusResponse(
+        run_id=str(operation["run_id"]),
+        session_id=str(operation["session_id"]),
+        status=str(operation["status"]),
+        error_code=str(operation["error_code"]) if operation.get("error_code") else None,
+    )
 
 
 @router.get("/agent-turns/{run_id}/events")

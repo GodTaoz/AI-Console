@@ -7,6 +7,8 @@ import { filesystemUsedPercent, formatBytes, formatBytesPerSecond, formatPercent
 import DataPanel from '@/components/data/DataPanel.vue'
 import PageToolbar from '@/components/data/PageToolbar.vue'
 import StatusTag from '@/components/data/StatusTag.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import { paginationFor } from '@/constants/table'
 import type { FilesystemSnapshot, FirewallRule, ListeningPort, ResourcesResponse } from '@/types'
 
 const resources = ref<ResourcesResponse | null>(null)
@@ -59,7 +61,9 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateSecurityColumns
 
 <template>
   <section class="ops-page">
-    <PageToolbar :status="resources?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadResources" />
+    <PageHeader :title="t('pages.networkStorage.title')" :description="t('pages.networkStorage.description')">
+      <template #actions><PageToolbar :status="resources?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadResources" /></template>
+    </PageHeader>
     <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
     <div class="dashboard-grid dashboard-grid--four">
       <DataPanel :title="t('networkUi.riskVolumes')" compact><NStatistic class="metric-stat" :value="resources ? atRiskVolumes : '—'" /></DataPanel>
@@ -86,11 +90,11 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateSecurityColumns
         <NAlert class="security-note" type="info" :show-icon="true">{{ t('securityUi.explanation') }}</NAlert>
       </DataPanel>
       <DataPanel :title="t('securityUi.allowedPorts')">
-        <NDataTable v-if="firewall?.rules.length" class="data-table-v2" :columns="firewallColumns" :data="firewall.rules" :row-key="(row: FirewallRule) => `${row.port}-${row.protocol}-${row.source}-${row.family}`" :pagination="{ pageSize: 10 }" :scroll-x="640" size="small" />
+        <NDataTable v-if="firewall?.rules.length" class="data-table-v2" :columns="firewallColumns" :data="firewall.rules" :row-key="(row: FirewallRule) => `${row.port}-${row.protocol}-${row.source}-${row.family}`" :pagination="paginationFor(firewall.rules.length)" :scroll-x="640" size="small" />
         <NEmpty v-else class="panel-empty" :description="t('securityUi.noRules')" />
       </DataPanel>
       <DataPanel :title="t('securityUi.listeningPorts')">
-        <NDataTable v-if="listeningPorts.length" class="data-table-v2" :columns="listeningColumns" :data="listeningPorts" :row-key="(row: ListeningPort) => `${row.port}-${row.protocol}-${row.address}`" :pagination="{ pageSize: 12 }" :scroll-x="650" size="small" />
+        <NDataTable v-if="listeningPorts.length" class="data-table-v2" :columns="listeningColumns" :data="listeningPorts" :row-key="(row: ListeningPort) => `${row.port}-${row.protocol}-${row.address}`" :pagination="paginationFor(listeningPorts.length)" :scroll-x="650" size="small" />
         <NEmpty v-else class="panel-empty" :description="t('securityUi.noListeningPorts')" />
       </DataPanel>
     </div>

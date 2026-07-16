@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NCheckbox, NDrawer, NDrawerContent, NDropdown, NEmpty, NIcon, NInput, NModal, NSelect, NSpin, NTabPane, NTabs, NTag } from 'naive-ui'
+import { NAlert, NButton, NCheckbox, NDrawer, NDrawerContent, NDropdown, NEmpty, NIcon, NInput, NModal, NSelect, NSpin, NTabPane, NTabs, NTag, useNotification } from 'naive-ui'
 import { AttachOutline, ChevronBackOutline, ChevronForwardOutline, MenuOutline, SendOutline, StopCircleOutline } from '@vicons/ionicons5'
 
 import AgentMarkdown from '@/components/agents/AgentMarkdown.vue'
 import AgentModuleNav from '@/components/agents/AgentModuleNav.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 import {
+  ApiError,
   archiveAgentSession,
   deleteAgentSourceSession,
   getAgentHistory,
@@ -14,6 +16,7 @@ import {
   getAgentModels,
   getAgentResumeHint,
   getAgentRuntimeStatus,
+  getAgentTurnStatus,
   getAgentSessions,
   interruptAgentTurn,
   resolveAgentApproval,
@@ -44,7 +47,15 @@ interface LiveTool {
   status: string
 }
 
+interface TurnMetrics {
+  sessionId: string
+  previousAssistantId: string
+  thinkingMs: number
+  totalMs: number
+}
+
 interface PendingApproval {
+  runId: string
   approvalId: string
   kind: string
   summary: string
@@ -57,6 +68,7 @@ interface PendingAttachment extends AgentAttachmentPayload {
 }
 
 const { t } = useI18n()
+const notification = useNotification()
 const { dateTime } = useConsoleFormatters()
 const sessions = ref<AgentSessionListResponse | null>(null)
 const runtimeStatus = ref<AgentRuntimeStatusResponse | null>(null)
@@ -67,8 +79,6 @@ const inbox = ref<AgentMessage[]>([])
 const pendingApprovals = ref<PendingApproval[]>([])
 const loading = ref(false)
 const historyLoading = ref(false)
-const error = ref('')
-const runtimeError = ref('')
 const searchText = ref('')
 const historyQuery = ref('')
 const runtimeFilter = ref('all')
@@ -80,11 +90,13 @@ const startingSessionId = ref('')
 const streamingText = ref('')
 const models = ref<AgentModelOption[]>([])
 const selectedModel = ref<string | null>(null)
+const selectedReasoningEffort = ref<string | null>(null)
 const modelLoading = ref(false)
 const attachments = ref<PendingAttachment[]>([])
 const attachmentInput = ref<HTMLInputElement | null>(null)
 const taskBody = ref('')
 const taskType = ref<AgentMessageType>('task')
+const workspaceTab = ref<'conversation' | 'tasks'>('conversation')
 const sendingTask = ref(false)
 const resumeCommand = ref('')
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
@@ -101,13 +113,31 @@ const resizing = ref(false)
 const turnPhase = ref<TurnPhase | null>(null)
 const turnPhaseDetail = ref('')
 const turnStartedAt = ref(0)
-const phaseElapsedSeconds = ref(0)
+const phaseStartedAt = ref(0)
+const turnElapsedMs = ref(0)
+const phaseElapsedMs = ref(0)
+const thinkingElapsedMs = ref(0)
+const lastTurnMetrics = ref<TurnMetrics | null>(null)
+const turnPreviousAssistantId = ref('')
 const liveTools = ref<LiveTool[]>([])
 const historyRoot = ref<HTMLElement | null>(null)
 let eventSource: EventSource | null = null
 let phaseTimer: number | null = null
+let thinkingAccumulatedMs = 0
+const dismissedApprovalKeys = new Set<string>()
 let selectionGeneration = 0
 const activeRunsStorageKey = 'ai-console-agent-active-runs'
+const selectedSessionStorageKey = 'ai-console-agent-selected-session'
+const sessionStatusPriority: Record<AgentLifecycleStatus, number> = {
+  active: 0,
+  starting: 1,
+  waiting: 2,
+  idle: 3,
+  unknown: 4,
+  failed: 5,
+  lost: 6,
+  completed: 7,
+}
 
 const statusOptions = computed(() => [
   { label: t('agentUi.allStatuses'), value: 'all' },
@@ -133,18 +163,37 @@ const actionOptions = computed(() => {
   items.push({ label: t('agentUi.deleteSource'), key: 'delete' })
   return items
 })
+function compareSessions(left: AgentSession, right: AgentSession) {
+  const statusDifference = sessionStatusPriority[left.status] - sessionStatusPriority[right.status]
+  const leftActivity = typeof left.metadata.runtime_updated_at === 'string' ? left.metadata.runtime_updated_at : left.last_seen_at
+  const rightActivity = typeof right.metadata.runtime_updated_at === 'string' ? right.metadata.runtime_updated_at : right.last_seen_at
+  return statusDifference || rightActivity.localeCompare(leftActivity)
+}
 const filteredSessions = computed(() => (sessions.value?.sessions ?? []).filter((session) => {
   const query = searchText.value.trim().toLocaleLowerCase()
   return (runtimeFilter.value === 'all' || session.agent.runtime === runtimeFilter.value)
     && (statusFilter.value === 'all' || session.status === statusFilter.value)
     && (!query || `${session.agent.display_name} ${session.purpose} ${session.external_session_id ?? ''}`.toLocaleLowerCase().includes(query))
-}).sort((left, right) => right.last_seen_at.localeCompare(left.last_seen_at)))
+}).sort(compareSessions))
 const selectedAdapterState = computed(() => selectedSession.value ? runtimeStatus.value?.adapters[selectedSession.value.agent.runtime] : undefined)
 const canChat = computed(() => Boolean(selectedSession.value?.external_session_id && !selectedSession.value.source_deleted_at && runtimeStatus.value?.available && selectedAdapterState.value !== 'unavailable'))
 const modelOptions = computed(() => models.value.map((model) => ({
   label: model.label,
   value: model.id,
 })))
+const selectedModelOption = computed(() => models.value.find((model) => model.id === selectedModel.value) ?? null)
+const reasoningOptions = computed(() => [
+  {
+    label: selectedModelOption.value?.default_reasoning_effort
+      ? t('agentUi.reasoningAutoWithDefault', { effort: t(`agentUi.reasoningEffort.${selectedModelOption.value.default_reasoning_effort}`) })
+      : t('agentUi.reasoningAuto'),
+    value: 'auto',
+  },
+  ...(selectedModelOption.value?.reasoning_efforts ?? []).map((effort) => ({
+    label: t(`agentUi.reasoningEffort.${effort}`),
+    value: effort,
+  })),
+])
 const workspaceStyle = computed(() => ({ '--session-pane-width': `${sessionPaneCollapsed.value ? 0 : sessionPaneWidth.value}px` }))
 const totalAttachmentBytes = computed(() => attachments.value.reduce((total, item) => total + item.size, 0))
 const mobileDrawerWidth = computed(() => typeof window === 'undefined' ? 320 : Math.min(360, Math.max(280, window.innerWidth - 40)))
@@ -155,6 +204,9 @@ const turnPhaseLabel = computed(() => {
 })
 const turnStartingForSelected = computed(() => Boolean(selectedSession.value && startingSessionId.value === selectedSession.value.session_id))
 const turnBusy = computed(() => Boolean(currentRunId.value || turnStartingForSelected.value))
+const latestAssistantMessageId = computed(() => [...history.value].reverse().find((message) => message.role === 'assistant')?.message_id ?? '')
+const activeApproval = computed(() => pendingApprovals.value[0] ?? null)
+const remainingApprovalCount = computed(() => Math.max(0, pendingApprovals.value.length - 1))
 
 function statusText(status: AgentLifecycleStatus) { return t(`agentUi.status.${status}`) }
 function statusType(status: AgentLifecycleStatus) {
@@ -191,7 +243,24 @@ function forgetActiveRun(sessionId: string, runId: string) {
   delete runs[sessionId]
   sessionStorage.setItem(activeRunsStorageKey, JSON.stringify(runs))
 }
-function setError(value: unknown) { error.value = value instanceof Error ? value.message : String(value) }
+function apiErrorCode(value: unknown) {
+  if (!(value instanceof ApiError) || !value.body || typeof value.body !== 'object') return ''
+  const detail = 'detail' in value.body ? value.body.detail : null
+  return detail && typeof detail === 'object' && 'code' in detail ? String(detail.code ?? '') : ''
+}
+
+function approvalKey(runId: string, approvalId: string) {
+  return `${runId}:${approvalId}`
+}
+
+function notifyError(content: string, title = t('common.loadFailed')) {
+  notification.error({ title, content, duration: 6000, closable: true })
+}
+
+function setError(value: unknown) {
+  const code = apiErrorCode(value) || 'runtime_error'
+  notifyError(t('agentUi.operationFailed', { code }))
+}
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -200,7 +269,6 @@ function formatFileSize(bytes: number) {
 
 async function loadAgents(preserveSelection = true) {
   loading.value = true
-  error.value = ''
   try {
     const [nextSessions, nextRuntime] = await Promise.all([
       getAgentSessions(showArchived.value),
@@ -214,7 +282,13 @@ async function loadAgents(preserveSelection = true) {
     if (!selectedSession.value && nextSessions.sessions.length) {
       const requestedSessionId = sessionStorage.getItem('ai-console-agent-open-session')
       if (requestedSessionId) sessionStorage.removeItem('ai-console-agent-open-session')
-      await selectSession(nextSessions.sessions.find((item) => item.session_id === requestedSessionId) ?? nextSessions.sessions[0])
+      const savedSessionId = sessionStorage.getItem(selectedSessionStorageKey)
+      const orderedSessions = [...nextSessions.sessions].sort(compareSessions)
+      await selectSession(
+        orderedSessions.find((item) => item.session_id === requestedSessionId)
+        ?? orderedSessions.find((item) => item.session_id === savedSessionId)
+        ?? orderedSessions[0],
+      )
     }
   } catch (err) {
     setError(err)
@@ -227,6 +301,7 @@ async function selectSession(session: AgentSession) {
   const generation = ++selectionGeneration
   closeEventStream()
   selectedSession.value = session
+  sessionStorage.setItem(selectedSessionStorageKey, session.session_id)
   mobileDrawerOpen.value = false
   history.value = []
   inbox.value = []
@@ -234,16 +309,16 @@ async function selectSession(session: AgentSession) {
   pendingApprovals.value = []
   currentRunId.value = activeRunFor(session.session_id)
   streamingText.value = ''
-  runtimeError.value = ''
   resumeCommand.value = ''
   attachments.value = []
   liveTools.value = []
-  turnPhase.value = null
+  resetTurnTiming()
   models.value = []
   selectedModel.value = null
+  selectedReasoningEffort.value = null
   historyQuery.value = ''
   historyLoading.value = true
-  if (currentRunId.value) connectRunStream(session.session_id, currentRunId.value)
+  if (currentRunId.value) void connectRunStream(session.session_id, currentRunId.value, true)
   try {
     modelLoading.value = true
     const [historyResponse, inboxResponse, modelResponse] = await Promise.all([
@@ -260,10 +335,11 @@ async function selectSession(session: AgentSession) {
       ?? modelResponse?.models.find((item) => item.is_default)?.id
       ?? modelResponse?.models[0]?.id
       ?? null
+    selectedReasoningEffort.value = 'auto'
     await scrollHistoryToEnd()
   } catch (err) {
     if (generation === selectionGeneration && selectedSession.value?.session_id === session.session_id) {
-      runtimeError.value = err instanceof Error ? err.message : String(err)
+      setError(err)
     }
   } finally {
     if (generation === selectionGeneration && selectedSession.value?.session_id === session.session_id) {
@@ -283,19 +359,64 @@ function stopPhaseTimer() {
   phaseTimer = null
 }
 
+function formatRunDuration(milliseconds: number) {
+  const seconds = Math.max(0, milliseconds) / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)} ${t('agentUi.secondsShort')}`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`
+}
+
+function updateRunTimers(now = Date.now()) {
+  turnElapsedMs.value = turnStartedAt.value ? Math.max(0, now - turnStartedAt.value) : 0
+  phaseElapsedMs.value = phaseStartedAt.value ? Math.max(0, now - phaseStartedAt.value) : 0
+  thinkingElapsedMs.value = thinkingAccumulatedMs
+    + (turnPhase.value === 'thinking' && phaseStartedAt.value ? Math.max(0, now - phaseStartedAt.value) : 0)
+}
+
+function resetTurnTiming(clearCompleted = true) {
+  stopPhaseTimer()
+  turnPhase.value = null
+  turnPhaseDetail.value = ''
+  turnStartedAt.value = 0
+  phaseStartedAt.value = 0
+  turnElapsedMs.value = 0
+  phaseElapsedMs.value = 0
+  thinkingElapsedMs.value = 0
+  thinkingAccumulatedMs = 0
+  turnPreviousAssistantId.value = ''
+  if (clearCompleted) lastTurnMetrics.value = null
+}
+
 function setTurnPhase(phase: TurnPhase | null, detail = '') {
+  const now = Date.now()
+  const previousPhase = turnPhase.value
+  if (previousPhase === 'thinking' && phase !== 'thinking' && phaseStartedAt.value) {
+    thinkingAccumulatedMs += Math.max(0, now - phaseStartedAt.value)
+  }
   turnPhase.value = phase
   turnPhaseDetail.value = detail.slice(0, 120)
   if (!phase) {
     stopPhaseTimer()
+    phaseStartedAt.value = 0
     return
   }
-  if (!turnStartedAt.value) turnStartedAt.value = Date.now()
-  phaseElapsedSeconds.value = Math.max(0, Math.floor((Date.now() - turnStartedAt.value) / 1000))
+  if (!turnStartedAt.value) turnStartedAt.value = now
+  if (previousPhase !== phase || !phaseStartedAt.value) phaseStartedAt.value = now
+  updateRunTimers(now)
   if (phaseTimer === null) {
     phaseTimer = window.setInterval(() => {
-      phaseElapsedSeconds.value = Math.max(0, Math.floor((Date.now() - turnStartedAt.value) / 1000))
-    }, 1000)
+      updateRunTimers()
+    }, 100)
+  }
+}
+
+function finishTurnTiming(sessionId: string) {
+  updateRunTimers()
+  lastTurnMetrics.value = {
+    sessionId,
+    previousAssistantId: turnPreviousAssistantId.value,
+    thinkingMs: thinkingElapsedMs.value,
+    totalMs: turnElapsedMs.value,
   }
 }
 
@@ -350,14 +471,25 @@ async function reloadHistoryAfterTurn(sessionId: string, generation: number) {
 function handleTurnEvent(sessionId: string, runId: string, event: MessageEvent<string>) {
   const payload = JSON.parse(event.data) as AgentTurnEvent
   const isSelectedRun = selectedSession.value?.session_id === sessionId && currentRunId.value === runId
+  if (payload.type === 'approval_resolved' && payload.approval_id) {
+    dismissedApprovalKeys.add(approvalKey(runId, payload.approval_id))
+    pendingApprovals.value = pendingApprovals.value.filter((item) => item.runId !== runId || item.approvalId !== payload.approval_id)
+    return
+  }
   if (payload.type === 'completed' || payload.type === 'failed' || payload.type === 'interrupted') {
     forgetActiveRun(sessionId, runId)
+    pendingApprovals.value = pendingApprovals.value.filter((item) => item.runId !== runId)
     if (!isSelectedRun) return
     streamingText.value = ''
     currentRunId.value = ''
+    finishTurnTiming(sessionId)
     setTurnPhase(null)
     closeEventStream()
-    void reloadHistoryAfterTurn(sessionId, selectionGeneration)
+    if (payload.type === 'failed') {
+      notifyError(t('agentUi.turnFailed', { code: payload.code ?? 'runtime_error' }), t('agentUi.runtimeUnavailable'))
+    } else {
+      void reloadHistoryAfterTurn(sessionId, selectionGeneration)
+    }
     return
   }
   if (!isSelectedRun) return
@@ -375,28 +507,63 @@ function handleTurnEvent(sessionId: string, runId: string, event: MessageEvent<s
   }
   if (payload.type === 'approval' && payload.approval_id) {
     setTurnPhase('waiting_approval')
-    pendingApprovals.value.push({ approvalId: payload.approval_id, kind: payload.kind ?? 'approval', summary: payload.summary ?? t('agentUi.approvalRequired'), resolving: false })
+    if (!dismissedApprovalKeys.has(approvalKey(runId, payload.approval_id))
+      && !pendingApprovals.value.some((item) => item.runId === runId && item.approvalId === payload.approval_id)) {
+      pendingApprovals.value.push({ runId, approvalId: payload.approval_id, kind: payload.kind ?? 'approval', summary: payload.summary ?? t('agentUi.approvalRequired'), resolving: false })
+    }
   }
 }
 
-function connectRunStream(sessionId: string, runId: string) {
+async function clearStaleRun(sessionId: string, runId: string, reloadHistory = true) {
+  forgetActiveRun(sessionId, runId)
+  pendingApprovals.value = pendingApprovals.value.filter((item) => item.runId !== runId)
+  if (selectedSession.value?.session_id !== sessionId || currentRunId.value !== runId) return
+  currentRunId.value = ''
+  streamingText.value = ''
+  setTurnPhase(null)
+  closeEventStream()
+  if (reloadHistory) await reloadHistoryAfterTurn(sessionId, selectionGeneration)
+}
+
+async function reconcileRunState(sessionId: string, runId: string, reloadHistory = true) {
+  try {
+    const operation = await getAgentTurnStatus(runId)
+    if (operation.status === 'running') return true
+    await clearStaleRun(sessionId, runId, reloadHistory)
+    return false
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      await clearStaleRun(sessionId, runId, reloadHistory)
+      return false
+    }
+    setError(err)
+    return false
+  }
+}
+
+async function recoverDisconnectedRun(sessionId: string, runId: string) {
+  const stillRunning = await reconcileRunState(sessionId, runId)
+  if (stillRunning && selectedSession.value?.session_id === sessionId && currentRunId.value === runId) {
+    notifyError(t('agentUi.streamDisconnected'), t('agentUi.runtimeUnavailable'))
+  }
+}
+
+async function connectRunStream(sessionId: string, runId: string, verifyStoredRun = false) {
   if (selectedSession.value?.session_id !== sessionId) return
   closeEventStream()
   currentRunId.value = runId
-  turnStartedAt.value = Date.now()
+  if (!turnStartedAt.value) turnStartedAt.value = Date.now()
   setTurnPhase('thinking')
   const source = new EventSource(`/api/v1/agent-turns/${encodeURIComponent(runId)}/events`)
   eventSource = source
   const handler = (event: Event) => handleTurnEvent(sessionId, runId, event as MessageEvent<string>)
-  for (const type of ['started', 'phase', 'text_delta', 'tool', 'approval', 'completed', 'failed', 'interrupted']) source.addEventListener(type, handler)
+  for (const type of ['started', 'phase', 'text_delta', 'tool', 'approval', 'approval_resolved', 'completed', 'failed', 'interrupted']) source.addEventListener(type, handler)
   source.onerror = () => {
     if (eventSource !== source) return
     source.close()
     eventSource = null
     stopPhaseTimer()
-    if (selectedSession.value?.session_id === sessionId && currentRunId.value === runId) {
-      runtimeError.value = t('agentUi.streamDisconnected')
-    }
+    void recoverDisconnectedRun(sessionId, runId)
   }
 }
 
@@ -409,15 +576,17 @@ async function submitTurn() {
   const pendingAttachments = attachments.value.map(({ name, media_type, data_base64 }) => ({ name, media_type, data_base64 }))
   const attachmentNames = attachments.value.map((item) => item.name)
   attachments.value = []
-  runtimeError.value = ''
   liveTools.value = []
   startingSessionId.value = sessionId
+  resetTurnTiming()
+  turnPreviousAssistantId.value = latestAssistantMessageId.value
   turnStartedAt.value = Date.now()
   setTurnPhase('thinking')
   history.value.push({ message_id: `local-${Date.now()}`, role: 'user', text: [text, attachmentNames.length ? t('agentUi.attachmentsSent', { count: attachmentNames.length }) : ''].filter(Boolean).join('\n'), created_at: new Date().toISOString(), tool_summaries: [], source: selectedSession.value.agent.runtime === 'hermes' ? 'hermes' : 'codex' })
   void scrollHistoryToEnd()
   try {
-    const response = await startAgentTurn(sessionId, text, selectedModel.value, pendingAttachments)
+    const reasoningEffort = selectedReasoningEffort.value === 'auto' ? null : selectedReasoningEffort.value
+    const response = await startAgentTurn(sessionId, text, selectedModel.value, reasoningEffort, pendingAttachments)
     rememberActiveRun(sessionId, response.run_id)
     if (generation === selectionGeneration && selectedSession.value?.session_id === sessionId) {
       streamingText.value = ''
@@ -499,23 +668,48 @@ function toggleSessionPane() {
 
 async function stopTurn() {
   if (!currentRunId.value) return
-  try { await interruptAgentTurn(currentRunId.value) } catch (err) { setError(err) }
+  const sessionId = selectedSession.value?.session_id
+  const runId = currentRunId.value
+  try {
+    await interruptAgentTurn(runId)
+  } catch (err) {
+    if (sessionId && err instanceof ApiError && err.status === 404) {
+      await clearStaleRun(sessionId, runId)
+    } else {
+      setError(err)
+    }
+  }
 }
 
 async function resolveApproval(approval: PendingApproval, decision: 'approve' | 'deny') {
-  if (!currentRunId.value) return
   approval.resolving = true
   try {
-    await resolveAgentApproval(currentRunId.value, approval.approvalId, decision)
-    pendingApprovals.value = pendingApprovals.value.filter((item) => item.approvalId !== approval.approvalId)
+    await resolveAgentApproval(approval.runId, approval.approvalId, decision)
+    dismissedApprovalKeys.add(approvalKey(approval.runId, approval.approvalId))
+    pendingApprovals.value = pendingApprovals.value.filter((item) => item.runId !== approval.runId || item.approvalId !== approval.approvalId)
   } catch (err) {
-    setError(err)
+    const code = apiErrorCode(err)
+    if (code === 'approval_not_found' || code === 'run_not_found') {
+      dismissedApprovalKeys.add(approvalKey(approval.runId, approval.approvalId))
+      pendingApprovals.value = pendingApprovals.value.filter((item) => item.runId !== approval.runId || item.approvalId !== approval.approvalId)
+      notifyError(t('agentUi.approvalExpired'), t('agentUi.approvalRequired'))
+    } else {
+      setError(err)
+    }
   } finally {
     approval.resolving = false
   }
 }
 
-async function submitTask() {
+async function dispatchTaskToRuntime() {
+  if (!selectedSession.value || !taskBody.value.trim() || !canChat.value || turnBusy.value) return
+  composerText.value = taskBody.value.trim()
+  taskBody.value = ''
+  workspaceTab.value = 'conversation'
+  await submitTurn()
+}
+
+async function saveTaskToInbox() {
   if (!selectedSession.value || !taskBody.value.trim()) return
   sendingTask.value = true
   try {
@@ -545,6 +739,7 @@ async function handleAction(key: string) {
   try {
     if (key === 'archive') {
       await archiveAgentSession(selectedSession.value.session_id)
+      sessionStorage.removeItem(selectedSessionStorageKey)
       selectedSession.value = null
       await loadAgents(false)
     } else if (key === 'unarchive') {
@@ -574,6 +769,7 @@ async function confirmDelete() {
     await deleteAgentSourceSession(selectedSession.value.session_id, deleteConfirmation.value)
     deleteVisible.value = false
     selectedSession.value = null
+    sessionStorage.removeItem(selectedSessionStorageKey)
     if (sessions.value) {
       sessions.value = {
         ...sessions.value,
@@ -610,6 +806,12 @@ async function confirmRename() {
 }
 
 watch(showArchived, () => void loadAgents(false))
+watch(selectedModel, () => {
+  if (selectedReasoningEffort.value !== 'auto'
+    && !selectedModelOption.value?.reasoning_efforts.includes(selectedReasoningEffort.value ?? '')) {
+    selectedReasoningEffort.value = 'auto'
+  }
+})
 onMounted(() => {
   const savedWidth = Number(localStorage.getItem('ai-console-agent-pane-width'))
   if (Number.isFinite(savedWidth)) sessionPaneWidth.value = Math.min(520, Math.max(260, savedWidth))
@@ -621,8 +823,8 @@ onBeforeUnmount(closeEventStream)
 
 <template>
   <section class="ops-page agent-workspace-page">
+    <PageHeader :title="t('pages.agents.title')" :description="t('pages.agents.description')" />
     <AgentModuleNav />
-    <NAlert v-if="error" type="error" :title="t('common.loadFailed')" closable @close="error = ''">{{ error }}</NAlert>
     <div class="agent-workspace" :class="{ 'is-resizing': resizing, 'is-session-pane-collapsed': sessionPaneCollapsed }" :style="workspaceStyle">
       <aside v-if="!sessionPaneCollapsed" class="agent-session-sidebar">
         <div class="agent-session-sidebar__header">
@@ -685,8 +887,8 @@ onBeforeUnmount(closeEventStream)
           </div>
         </header>
 
-        <NTabs type="line" animated class="agent-workspace-tabs">
-          <NTabPane name="conversation" :tab="t('agentUi.conversation')">
+        <NTabs v-model:value="workspaceTab" type="line" animated class="agent-workspace-tabs">
+          <NTabPane name="conversation" :tab="t('agentUi.conversation')" class="agent-conversation-pane">
             <div class="agent-history-tools">
               <NButton v-if="nextCursor" size="tiny" secondary :loading="historyLoading" @click="loadOlderHistory">{{ t('agentUi.loadOlder') }}</NButton>
               <div>
@@ -697,7 +899,6 @@ onBeforeUnmount(closeEventStream)
 
             <div ref="historyRoot" class="agent-history">
               <NSpin v-if="historyLoading && !history.length" size="small" />
-              <NAlert v-else-if="runtimeError" type="warning" :title="t('agentUi.runtimeUnavailable')">{{ runtimeError }}</NAlert>
               <template v-else-if="history.length || streamingText">
                 <article v-for="message in history" :key="message.message_id" class="agent-history-message" :class="`is-${message.role}`">
                   <div class="agent-message-avatar">{{ message.role === 'user' ? t('agentUi.role.user').slice(0, 1) : message.role === 'tool' ? 'T' : 'AI' }}</div>
@@ -707,12 +908,22 @@ onBeforeUnmount(closeEventStream)
                     <div v-if="message.tool_summaries.length" class="agent-tool-list">
                       <NTag v-for="tool in message.tool_summaries" :key="`${message.message_id}-${tool.name}`" size="small" :bordered="false">{{ tool.name }} · {{ tool.status }}</NTag>
                     </div>
+                    <div
+                      v-if="message.message_id === latestAssistantMessageId && lastTurnMetrics?.sessionId === selectedSession.session_id && latestAssistantMessageId !== lastTurnMetrics.previousAssistantId"
+                      class="agent-response-metrics"
+                    >
+                      {{ t('agentUi.turnMetrics', { thinking: formatRunDuration(lastTurnMetrics.thinkingMs), total: formatRunDuration(lastTurnMetrics.totalMs) }) }}
+                    </div>
                   </div>
                 </article>
                 <div v-if="turnPhase" class="agent-run-state">
-                  <NSpin size="small" />
-                  <div><strong>{{ turnPhaseLabel }}</strong><span v-if="turnPhaseDetail">{{ turnPhaseDetail }}</span></div>
-                  <span>{{ t('agentUi.phaseElapsed', { seconds: phaseElapsedSeconds }) }}</span>
+                  <span class="agent-run-pulse" aria-hidden="true"><i /><i /><i /></span>
+                  <div class="agent-run-state__body">
+                    <div><strong>{{ turnPhaseLabel }}</strong><span>{{ t('agentUi.currentPhaseElapsed', { duration: formatRunDuration(phaseElapsedMs) }) }}</span></div>
+                    <span v-if="turnPhaseDetail">{{ turnPhaseDetail }}</span>
+                    <span v-else-if="turnPhase !== 'thinking' && thinkingElapsedMs">{{ t('agentUi.thoughtFor', { duration: formatRunDuration(thinkingElapsedMs) }) }}</span>
+                  </div>
+                  <time>{{ t('agentUi.totalElapsed', { duration: formatRunDuration(turnElapsedMs) }) }}</time>
                 </div>
                 <div v-if="liveTools.length" class="agent-live-tools">
                   <NTag v-for="tool in liveTools" :key="tool.name" size="small" :bordered="false">{{ tool.name }} · {{ tool.status }}</NTag>
@@ -725,13 +936,16 @@ onBeforeUnmount(closeEventStream)
               <NEmpty v-else :description="t('agentUi.noHistory')" />
             </div>
 
-            <div v-if="pendingApprovals.length" class="agent-approval-list">
-              <article v-for="approval in pendingApprovals" :key="approval.approvalId" class="agent-approval-card">
-                <div><strong>{{ t('agentUi.approvalRequired') }}</strong><span>{{ approval.kind }}</span></div>
-                <p>{{ approval.summary }}</p>
+            <div v-if="activeApproval" class="agent-approval-list">
+              <article :key="`${activeApproval.runId}-${activeApproval.approvalId}`" class="agent-approval-card">
                 <div>
-                  <NButton size="small" secondary :loading="approval.resolving" @click="resolveApproval(approval, 'deny')">{{ t('agentUi.deny') }}</NButton>
-                  <NButton size="small" type="primary" :loading="approval.resolving" @click="resolveApproval(approval, 'approve')">{{ t('agentUi.approve') }}</NButton>
+                  <div><strong>{{ t('agentUi.approvalRequired') }}</strong><span>{{ activeApproval.kind }}</span></div>
+                  <NTag v-if="remainingApprovalCount" size="small" :bordered="false">{{ t('agentUi.approvalRemaining', { count: remainingApprovalCount }) }}</NTag>
+                </div>
+                <p>{{ activeApproval.summary }}</p>
+                <div>
+                  <NButton class="agent-approval-deny" size="small" secondary :loading="activeApproval.resolving" @click="resolveApproval(activeApproval, 'deny')">{{ t('agentUi.deny') }}</NButton>
+                  <NButton class="agent-approval-approve" size="small" type="primary" :loading="activeApproval.resolving" @click="resolveApproval(activeApproval, 'approve')">{{ t('agentUi.approve') }}</NButton>
                 </div>
               </article>
             </div>
@@ -749,21 +963,26 @@ onBeforeUnmount(closeEventStream)
                   <NButton quaternary circle size="small" :aria-label="t('agentUi.attachFile')" :disabled="attachments.length >= 5 || turnBusy" @click="attachmentInput?.click()"><template #icon><NIcon><AttachOutline /></NIcon></template></NButton>
                   <input ref="attachmentInput" class="agent-file-input" type="file" multiple @change="addAttachments">
                   <NSelect v-model:value="selectedModel" class="agent-model-select" size="small" filterable :loading="modelLoading" :options="modelOptions" :placeholder="t('agentUi.selectModel')" />
+                  <NSelect v-if="reasoningOptions.length > 1" v-model:value="selectedReasoningEffort" class="agent-reasoning-select" size="small" :disabled="turnBusy" :options="reasoningOptions" :placeholder="t('agentUi.reasoning')" />
                 </div>
                 <div>
                   <span>{{ t('agentUi.inputHint') }}</span>
                   <NButton v-if="currentRunId" circle type="warning" :aria-label="t('agentUi.stopGenerating')" @click="stopTurn"><template #icon><NIcon><StopCircleOutline /></NIcon></template></NButton>
-                  <NButton v-else circle type="primary" :loading="turnStartingForSelected" :aria-label="t('agentUi.send')" :disabled="!canChat || turnBusy || (!composerText.trim() && !attachments.length)" @click="submitTurn"><template #icon><NIcon><SendOutline /></NIcon></template></NButton>
+                  <NButton v-else class="agent-send-button" circle type="primary" :loading="turnStartingForSelected" :aria-label="t('agentUi.send')" :disabled="!canChat || turnBusy || (!composerText.trim() && !attachments.length)" @click="submitTurn"><template #icon><NIcon><SendOutline /></NIcon></template></NButton>
                 </div>
               </div>
             </div>
           </NTabPane>
 
-          <NTabPane name="tasks" :tab="`${t('agentUi.taskInbox')} (${inbox.length})`">
+          <NTabPane name="tasks" :tab="`${t('agentUi.taskInbox')} (${inbox.length})`" class="agent-task-pane">
+            <p class="agent-task-hint">{{ t('agentUi.taskDeliveryHint') }}</p>
             <div class="agent-task-compose">
               <NSelect v-model:value="taskType" :options="taskTypeOptions" size="small" />
               <NInput v-model:value="taskBody" type="textarea" :maxlength="2000" show-count :placeholder="t('agentUi.messagePlaceholder')" />
-              <NButton type="primary" :loading="sendingTask" :disabled="!taskBody.trim()" @click="submitTask">{{ t('agentUi.deliverTask') }}</NButton>
+              <div class="agent-task-actions">
+                <NButton secondary :loading="sendingTask" :disabled="!taskBody.trim()" @click="saveTaskToInbox">{{ t('agentUi.saveToInbox') }}</NButton>
+                <NButton type="primary" :disabled="!canChat || turnBusy || !taskBody.trim()" @click="dispatchTaskToRuntime">{{ t('agentUi.sendAndRun') }}</NButton>
+              </div>
             </div>
             <div v-if="inbox.length" class="agent-message-list">
               <article v-for="message in inbox" :key="message.message_id" class="agent-message-item">

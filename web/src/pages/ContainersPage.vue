@@ -7,7 +7,9 @@ import { getDocker } from '@/api'
 import DataPanel from '@/components/data/DataPanel.vue'
 import PageToolbar from '@/components/data/PageToolbar.vue'
 import StatusTag from '@/components/data/StatusTag.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 import { useConsoleFormatters } from '@/composables/useConsoleFormatters'
+import { paginationFor } from '@/constants/table'
 import type { DockerContainerSnapshot, DockerResponse } from '@/types'
 
 const docker = ref<DockerResponse | null>(null)
@@ -52,7 +54,9 @@ onMounted(() => void loadDocker())
 
 <template>
   <section class="ops-page">
-    <PageToolbar :status="docker?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadDocker" />
+    <PageHeader :title="t('pages.containers.title')" :description="t('pages.containers.description')">
+      <template #actions><PageToolbar :status="docker?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadDocker" /></template>
+    </PageHeader>
     <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
     <div class="dashboard-grid dashboard-grid--four">
       <DataPanel :title="t('containerUi.total')" compact><NStatistic class="metric-stat" :value="docker?.containers.length ?? '—'" /></DataPanel>
@@ -62,7 +66,7 @@ onMounted(() => void loadDocker())
     </div>
     <DataPanel :title="t('containerUi.list')">
       <template #extra><span class="panel-caption">{{ t('containerUi.portMappings', { count: publishedPorts }) }}</span></template>
-      <NDataTable v-if="docker?.containers.length" class="data-table-v2" :columns="columns" :data="docker.containers" :row-key="(row: DockerContainerSnapshot) => row.name" :scroll-x="1100" size="small" />
+      <NDataTable v-if="docker?.containers.length" class="data-table-v2" :columns="columns" :data="docker.containers" :row-key="(row: DockerContainerSnapshot) => row.name" :pagination="paginationFor(docker.containers.length)" :scroll-x="1100" size="small" />
       <NEmpty v-else class="panel-empty" :description="t('containerUi.noContainers')" />
     </DataPanel>
     <DataPanel v-if="docker?.issues.length" :title="t('containerUi.events')">

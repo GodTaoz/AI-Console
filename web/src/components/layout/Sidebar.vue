@@ -12,7 +12,7 @@ import {
   WarningOutline,
 } from '@vicons/ionicons5'
 
-import { appRoutes, currentRoute, navigate } from '@/router'
+import { appRoutes, currentRoute, lastAgentRoutePath, navigate } from '@/router'
 import { closeSidebarOnMobile } from '@/stores/ui'
 
 const { t } = useI18n()
@@ -42,7 +42,7 @@ function isActive(path: string) {
 }
 
 function selectRoute(path: string) {
-  navigate(path)
+  navigate(path === '/agents' ? lastAgentRoutePath() : path)
   closeSidebarOnMobile()
 }
 </script>

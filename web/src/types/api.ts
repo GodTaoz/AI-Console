@@ -468,6 +468,13 @@ export interface AgentTurnStartResponse {
   status: string
 }
 
+export interface AgentTurnStatusResponse {
+  run_id: string
+  session_id: string
+  status: string
+  error_code: string | null
+}
+
 export interface AgentAttachmentPayload {
   name: string
   media_type: string
@@ -481,6 +488,8 @@ export interface AgentModelOption {
   supports_images: boolean
   is_current: boolean
   is_default: boolean
+  reasoning_efforts: string[]
+  default_reasoning_effort: string | null
 }
 
 export interface AgentModelListResponse {
@@ -497,13 +506,14 @@ export interface AgentRuntimeStatusResponse {
 
 export interface AgentTurnEvent {
   sequence?: number
-  type: 'started' | 'phase' | 'text_delta' | 'tool' | 'approval' | 'completed' | 'failed' | 'interrupted'
+  type: 'started' | 'phase' | 'text_delta' | 'tool' | 'approval' | 'approval_resolved' | 'completed' | 'failed' | 'interrupted'
   phase?: 'thinking' | 'tool_running' | 'waiting_approval' | 'responding'
   detail?: string
   text?: string
   name?: string
   status?: string
   approval_id?: string
+  decision?: 'approve' | 'deny'
   kind?: string
   summary?: string
   code?: string

@@ -7,6 +7,7 @@ import { formatPercent, getAiQuota } from '@/api'
 import DataPanel from '@/components/data/DataPanel.vue'
 import PageToolbar from '@/components/data/PageToolbar.vue'
 import StatusTag from '@/components/data/StatusTag.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 import { useConsoleFormatters } from '@/composables/useConsoleFormatters'
 import type { AiQuotaResponse } from '@/types'
 
@@ -33,7 +34,9 @@ onMounted(() => void loadAiQuota())
 
 <template>
   <section class="ops-page">
-    <PageToolbar :status="aiQuota?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadAiQuota" />
+    <PageHeader :title="t('pages.aiServices.title')" :description="t('pages.aiServices.description')">
+      <template #actions><PageToolbar :status="aiQuota?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadAiQuota" /></template>
+    </PageHeader>
     <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
     <div class="dashboard-grid dashboard-grid--four">
       <DataPanel :title="t('quotaUi.accounts')" compact><NStatistic class="metric-stat" :value="aiQuota?.accounts.length ?? '—'" /></DataPanel>

@@ -1,12 +1,48 @@
 from dataclasses import asdict
+from pathlib import Path
 from subprocess import CompletedProcess
 
 from qingluo_console.agent_registry.discovery import (
     load_codex_session_index,
     load_hermes_sessions,
+    parse_codex_thread_list,
     parse_hermes_session_list,
     select_codex_sessions,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_codex_thread_list_parser_keeps_only_safe_metadata():
+    entries = parse_codex_thread_list({
+        "data": [
+            {
+                "id": "019f6360-943e-7390-ba88-c144b01b658c",
+                "name": None,
+                "createdAt": 1784078701,
+                "updatedAt": 1784078792,
+                "preview": "private prompt content",
+                "cwd": "/sensitive/workspace",
+                "status": {"type": "notLoaded"},
+            },
+            {"id": "invalid id", "name": "ignored", "updatedAt": 1784078792},
+        ]
+    })
+
+    assert len(entries) == 1
+    assert entries[0].session_id == "019f6360-943e-7390-ba88-c144b01b658c"
+    assert entries[0].thread_name == "Codex b01b658c"
+    assert entries[0].updated_at.startswith("2026-")
+    assert "private" not in repr(entries)
+    assert "sensitive" not in repr(entries)
+
+
+def test_persistent_watcher_uses_multi_session_codex_discovery_without_legacy_filters():
+    unit = (ROOT / "deploy/systemd/ai-console-agent-watcher.service").read_text(encoding="utf-8")
+
+    assert "--codex-source auto --codex-limit 20 --all" in unit
+    assert "UnsetEnvironment=QINGLUO_AGENT_THREAD_NAME QINGLUO_AGENT_SESSION_PURPOSE" in unit
 
 
 def test_codex_session_index_parser_uses_only_safe_fields(tmp_path):

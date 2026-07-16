@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { sidebarCollapsed } from '@/stores/ui'
 
-import PageHeader from './PageHeader.vue'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 </script>
@@ -12,7 +11,6 @@ import Topbar from './Topbar.vue'
     <div class="workspace">
       <Topbar />
       <main class="workspace__content">
-        <PageHeader />
         <div class="workspace__slot"><slot /></div>
       </main>
     </div>

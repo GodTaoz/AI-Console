@@ -8,6 +8,7 @@ import DataPanel from '@/components/data/DataPanel.vue'
 import MetricChart, { type ChartSeries } from '@/components/data/MetricChart.vue'
 import PageToolbar from '@/components/data/PageToolbar.vue'
 import StatusTag from '@/components/data/StatusTag.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 import { useConsoleFormatters } from '@/composables/useConsoleFormatters'
 import type { AiQuotaResponse, AlertsResponse, ApiStatus, DockerContainerSnapshot, DockerResponse, MetricHistoryResponse, ResourcesResponse, SummaryResponse } from '@/types'
 
@@ -98,9 +99,13 @@ onMounted(() => void loadDashboard())
 
 <template>
   <section class="overview-dashboard">
-    <PageToolbar :status="overallStatus" :updated-at="lastUpdatedAt" :loading="loadState === 'loading'" collect @refresh="loadDashboard(true)">
-      <span>{{ overallStatus === 'ok' ? t('overviewUi.allOk') : t('overviewUi.hasIssues') }}</span>
-    </PageToolbar>
+    <PageHeader :title="t('pages.overview.title')" :description="t('pages.overview.liveDescription')">
+      <template #actions>
+        <PageToolbar :status="overallStatus" :updated-at="lastUpdatedAt" :loading="loadState === 'loading'" collect @refresh="loadDashboard(true)">
+          <span>{{ overallStatus === 'ok' ? t('overviewUi.allOk') : t('overviewUi.hasIssues') }}</span>
+        </PageToolbar>
+      </template>
+    </PageHeader>
 
     <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
 

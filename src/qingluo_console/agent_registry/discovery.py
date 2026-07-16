@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import subprocess
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 MAX_SESSION_INDEX_BYTES = 8 * 1024 * 1024
 MAX_SESSION_INDEX_LINE_BYTES = 16 * 1024
 HERMES_SOURCES = {"telegram", "cli"}
 HERMES_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+CODEX_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 TRACKING_CRON_TITLE_PATTERN = re.compile(
     r"(?i)(?:(?:旧)?进度(?:跟踪|追踪|汇报).*(?:cron|定时)|"
@@ -79,6 +82,48 @@ def load_codex_session_index(path: str | Path) -> list[CodexSessionIndexEntry]:
     except (OSError, UnicodeError) as exc:
         raise ValueError("Codex session index could not be read") from exc
     return sorted(entries.values(), key=lambda item: item.updated_at, reverse=True)
+
+
+def parse_codex_thread_list(payload: Any) -> list[CodexSessionIndexEntry]:
+    rows = payload.get("data", []) if isinstance(payload, dict) else []
+    entries: list[CodexSessionIndexEntry] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        session_id = item.get("id")
+        updated_at = item.get("updatedAt")
+        if not isinstance(session_id, str) or not CODEX_SESSION_ID_PATTERN.fullmatch(session_id):
+            continue
+        if isinstance(updated_at, (int, float)):
+            timestamp = datetime.fromtimestamp(updated_at, UTC).isoformat()
+        elif isinstance(updated_at, str) and updated_at.strip():
+            timestamp = updated_at.strip()[:64]
+        else:
+            continue
+        raw_name = item.get("name") or item.get("title")
+        thread_name = str(raw_name).strip()[:120] if raw_name else f"Codex {session_id[-8:]}"
+        entries.append(CodexSessionIndexEntry(session_id, thread_name, timestamp))
+    return sorted(entries, key=lambda item: item.updated_at, reverse=True)
+
+
+def load_codex_app_server_sessions(limit: int = 20) -> list[CodexSessionIndexEntry]:
+    if limit < 1 or limit > 100:
+        raise ValueError("Codex session limit must be between 1 and 100")
+
+    async def load() -> list[CodexSessionIndexEntry]:
+        from qingluo_console.runtime_bridge.adapters import CodexRpcClient
+
+        client = CodexRpcClient()
+        try:
+            await client.start()
+            payload = await client.request("thread/list", {"limit": limit})
+            return parse_codex_thread_list(payload)
+        except Exception as exc:
+            raise ValueError("Codex app-server session metadata query failed") from exc
+        finally:
+            await client.close()
+
+    return asyncio.run(load())
 
 
 def select_codex_sessions(

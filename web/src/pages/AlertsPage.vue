@@ -7,7 +7,9 @@ import { getAlerts } from '@/api'
 import DataPanel from '@/components/data/DataPanel.vue'
 import PageToolbar from '@/components/data/PageToolbar.vue'
 import StatusTag from '@/components/data/StatusTag.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 import { useConsoleFormatters } from '@/composables/useConsoleFormatters'
+import { paginationFor } from '@/constants/table'
 import type { AlertEvent, AlertsResponse } from '@/types'
 
 const alerts = ref<AlertsResponse | null>(null)
@@ -15,8 +17,18 @@ const { t } = useI18n()
 const { dateTime, issueText } = useConsoleFormatters()
 const loading = ref(false)
 const error = ref('')
+const activePage = ref(1)
+const resolvedPage = ref(1)
 const activeEvents = computed(() => alerts.value?.events.filter((event) => event.state === 'active') ?? [])
 const resolvedEvents = computed(() => alerts.value?.events.filter((event) => event.state === 'resolved') ?? [])
+const activeAlertPagination = computed(() => {
+  const pagination = paginationFor(activeEvents.value.length, activePage.value)
+  return pagination === false ? false : { ...pagination, onUpdatePage: (page: number) => { activePage.value = page } }
+})
+const resolvedAlertPagination = computed(() => {
+  const pagination = paginationFor(resolvedEvents.value.length, resolvedPage.value)
+  return pagination === false ? false : { ...pagination, onUpdatePage: (page: number) => { resolvedPage.value = page } }
+})
 const alertColumns = computed<DataTableColumns<AlertEvent>>(() => [
   { title: t('alertUi.event'), key: 'title', minWidth: 300, render: (row) => h('div', { class: 'table-primary' }, [h('strong', issueText(row.code, row.title)), h('span', `${row.source} · ${row.code}`)]) },
   { title: t('alertUi.severity'), key: 'severity', width: 120, render: (row) => h(StatusTag, { status: row.severity }) },
@@ -41,17 +53,19 @@ onMounted(() => void loadAlerts())
 
 <template>
   <section class="ops-page">
-    <PageToolbar :status="activeEvents.length ? 'warning' : 'ok'" :updated-at="alerts?.generated_at" :loading="loading" @refresh="loadAlerts" />
+    <PageHeader :title="t('pages.alerts.title')" :description="t('pages.alerts.description')">
+      <template #actions><PageToolbar :status="activeEvents.length ? 'warning' : 'ok'" :updated-at="alerts?.generated_at" :loading="loading" @refresh="loadAlerts" /></template>
+    </PageHeader>
     <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
     <div class="dashboard-grid">
       <DataPanel :title="t('alertUi.active')" compact><NStatistic class="metric-stat" :value="activeEvents.length" /></DataPanel>
       <DataPanel :title="t('alertUi.resolved')" compact><NStatistic class="metric-stat" :value="resolvedEvents.length" /></DataPanel>
       <DataPanel :title="t('alertUi.active')" wide>
-        <NDataTable v-if="activeEvents.length" class="data-table-v2" :columns="alertColumns" :data="activeEvents" :row-key="(row: AlertEvent) => row.fingerprint" :scroll-x="900" size="small" />
+        <NDataTable v-if="activeEvents.length" class="data-table-v2" :columns="alertColumns" :data="activeEvents" :row-key="(row: AlertEvent) => row.fingerprint" :pagination="activeAlertPagination" :scroll-x="900" size="small" />
         <NEmpty v-else class="panel-empty" :description="t('alertUi.noActive')" />
       </DataPanel>
       <DataPanel :title="t('alertUi.resolved')" wide>
-        <NDataTable v-if="resolvedEvents.length" class="data-table-v2" :columns="resolvedColumns" :data="resolvedEvents" :row-key="(row: AlertEvent) => row.fingerprint" :scroll-x="760" size="small" />
+        <NDataTable v-if="resolvedEvents.length" class="data-table-v2" :columns="resolvedColumns" :data="resolvedEvents" :row-key="(row: AlertEvent) => row.fingerprint" :pagination="resolvedAlertPagination" :scroll-x="760" size="small" />
         <NEmpty v-else class="panel-empty" :description="t('alertUi.noResolved')" />
       </DataPanel>
     </div>

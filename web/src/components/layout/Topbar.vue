@@ -37,17 +37,11 @@ function selectTheme(value: ThemeMode) {
 
 <template>
   <header class="topbar">
-    <div class="topbar__copy">
-      <strong>{{ t('header.title') }}</strong>
-      <span>{{ t('header.hint') }}</span>
-    </div>
-
+    <NButton quaternary circle size="small" :title="t('header.menu')" @click="toggleSidebar">
+      <template #icon><NIcon><MenuOutline /></NIcon></template>
+    </NButton>
     <div class="topbar__controls">
       <NSpace align="center" :size="4">
-        <NButton quaternary circle size="small" :title="t('header.menu')" @click="toggleSidebar">
-          <template #icon><NIcon><MenuOutline /></NIcon></template>
-        </NButton>
-
         <NDropdown :options="languageOptions" trigger="click" placement="bottom-end" @select="selectLanguage">
           <NButton quaternary circle size="small" :title="t('header.language')">
             <template #icon><NIcon><GlobeOutline /></NIcon></template>

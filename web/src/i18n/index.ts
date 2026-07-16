@@ -10,12 +10,15 @@ const messages = {
     ...uiMessages['zh-CN'],
     agentUi: {
       ...uiMessages['zh-CN'].agentUi,
-      moduleNavigation: '智能体功能', chatView: '会话', statusView: '状态监控', collapseSessions: '折叠会话列表', expandSessions: '展开会话列表', sessionName: '会话名称', discoverySource: '发现来源', openChat: '打开会话', problemSessions: '失败或失联', runtimeHealth: '运行连接', runtimeHealthHint: '发现器与运行时适配器的最新状态。', recentSessions: '最近会话', recentSessionsHint: '未归档会话按最近活动时间排序。', thinking: '正在思考', toolRunning: '正在调用工具', waitingApproval: '等待你的确认', responding: '正在生成回复', phaseElapsed: '{seconds} 秒', attachFile: '添加附件', send: '发送', inputHint: 'Ctrl + Enter 发送',
+      moduleNavigation: '智能体功能', chatView: '会话', statusView: '状态监控', collapseSessions: '折叠会话列表', expandSessions: '展开会话列表', sessionName: '会话名称', discoverySource: '发现来源', openChat: '打开会话', problemSessions: '失败或失联', statusBasis: '活动表示运行时元数据在最近 30 分钟内更新；超过 30 分钟显示为空闲。这是最近活动度，不代表终端进程仍在线。', runtimeHealth: '运行连接', runtimeHealthHint: '发现器与运行时适配器的最新状态。', recentSessions: '最近会话', recentSessionsHint: '活动会话优先，其余会话按生命周期和最近活动时间排序。', thinking: '正在思考', toolRunning: '正在调用工具', waitingApproval: '等待你的确认', responding: '正在生成回复', phaseElapsed: '{seconds} 秒', secondsShort: '秒', currentPhaseElapsed: '当前阶段 {duration}', totalElapsed: '总计 {duration}', thoughtFor: '已思考 {duration}', turnMetrics: '思考 {thinking} · 总耗时 {total}', reasoning: '思考强度', reasoningAuto: '自动（模型默认）', reasoningAutoWithDefault: '自动（默认{effort}）', reasoningEffort: { none: '关闭', minimal: '最小', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最大', ultra: 'Ultra' }, attachFile: '添加附件', send: '发送', inputHint: 'Ctrl + Enter 发送', taskInbox: '任务与收件箱', taskDeliveryHint: '发送并执行会通过 Runtime Bridge 在当前源会话启动新一轮处理；仅保存到收件箱不会自动唤醒智能体。', saveToInbox: '仅保存到收件箱', sendAndRun: '发送并执行', turnFailed: '本次执行失败（{code}），消息未从当前界面移除，请重试或检查运行连接。',
+      approvalExpired: '该审批已失效或所属任务已经结束，请重新发起任务。',
+      approvalRemaining: '还有 {count} 项',
+      operationFailed: '操作未完成（{code}），请检查运行连接后重试。',
     },
     agentCommands: '建议命令',
     app: {
       title: 'AI-Console',
-      subtitle: 'AI 工作站健康与额度预警',
+      subtitle: '本机 AI 工作站运行中心',
       phase: '运行中',
       phaseDescription: '真实指标在线 · 只读安全模式',
       heroEyebrow: '本地优先 / 只读状态面板',
@@ -38,7 +41,7 @@ const messages = {
     shell: {
       navigation: '导航',
       phase: '实时运行',
-      phaseDescription: '持续采集 · 只读监控',
+      phaseDescription: '监控持续采集 · 会话按授权操作',
       topbarEyebrow: '控制中枢',
       topbarHint: '系统正在守望 ThinkPad、Docker、NAS 与 AI 额度状态',
       pageHeaderEyebrow: '运维总览',
@@ -59,7 +62,7 @@ const messages = {
       overview: {
         title: '总览',
         description: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
-        liveDescription: '汇总主机、容器、额度与告警的最新采集状态。',
+        liveDescription: '主机、容器、AI 服务与告警的实时概览。',
         kicker: '总览',
         intro: '为控制台预留的全局摘要入口，后续会承载系统健康、资源概况与最近动态。',
         sections: {
@@ -73,7 +76,7 @@ const messages = {
       },
       hosts: {
         title: '主机监控',
-        description: '查看资源使用、实时吞吐、系统信息与进程占用排行。',
+        description: '资源使用、系统信息、吞吐趋势与进程占用。',
         kicker: '主机监控',
         intro: '预留主机资产与健康视图，后续会接入节点列表、资源曲线与可用性状态。',
         sections: {
@@ -87,7 +90,7 @@ const messages = {
       },
       containers: {
         title: '容器服务',
-        description: '查看容器运行状态、健康检查、端口映射与运行时间。',
+        description: '运行状态、健康检查、端口映射与运行时间。',
         kicker: '容器服务',
         intro: '预留容器编排入口，后续会接入服务列表、运行实例与部署状态。',
         sections: {
@@ -101,7 +104,7 @@ const messages = {
       },
       agents: {
         title: '智能体',
-        description: '统一查看 Hermes 与 Codex 会话历史，在保留原权限的前提下继续对话和管理会话。',
+        description: '统一查看智能体状态，并继续 Hermes 与 Codex 会话。',
         kicker: '智能体',
         intro: '查看真实会话历史、继续对话，并管理归档、审批和任务投递。',
         sections: {
@@ -119,7 +122,7 @@ const messages = {
       },
       aiServices: {
         title: 'AI 服务',
-        description: '查看 CPA / Codex 账号额度、使用进度与重置时间。',
+        description: '账号可用性、额度使用与重置时间。',
         kicker: 'AI 服务',
         intro: '预留模型与推理服务入口，后续会接入提供方、路由与使用情况。',
         sections: {
@@ -133,7 +136,7 @@ const messages = {
       },
       networkStorage: {
         title: '网络与存储',
-        description: '查看存储容量、挂载状态与主网络接口实时吞吐。',
+        description: '存储容量、网络吞吐、防火墙与监听端口。',
         kicker: '网络与存储',
         intro: '预留网络拓扑与存储资源入口，后续会接入挂载、链路与容量信息。',
         sections: {
@@ -147,7 +150,7 @@ const messages = {
       },
       alerts: {
         title: '告警记录',
-        description: '查看活动告警、首次出现时间、发生次数与恢复记录。',
+        description: '当前异常、发生次数与最近恢复记录。',
         kicker: '告警记录',
         intro: '预留事件与告警入口，后续会接入规则、通知和处置流程。',
         sections: {
@@ -189,12 +192,15 @@ const messages = {
     ...uiMessages['en-US'],
     agentUi: {
       ...uiMessages['en-US'].agentUi,
-      moduleNavigation: 'Agent views', chatView: 'Conversations', statusView: 'Status monitor', collapseSessions: 'Collapse session list', expandSessions: 'Expand session list', sessionName: 'Session name', discoverySource: 'Discovery source', openChat: 'Open chat', problemSessions: 'Failed or lost', runtimeHealth: 'Runtime connectivity', runtimeHealthHint: 'Latest discovery and runtime adapter status.', recentSessions: 'Recent sessions', recentSessionsHint: 'Unarchived sessions ordered by recent activity.', thinking: 'Thinking', toolRunning: 'Using a tool', waitingApproval: 'Waiting for your approval', responding: 'Generating a response', phaseElapsed: '{seconds}s', attachFile: 'Add attachment', send: 'Send', inputHint: 'Ctrl + Enter to send',
+      moduleNavigation: 'Agent views', chatView: 'Conversations', statusView: 'Status monitor', collapseSessions: 'Collapse session list', expandSessions: 'Expand session list', sessionName: 'Session name', discoverySource: 'Discovery source', openChat: 'Open chat', problemSessions: 'Failed or lost', statusBasis: 'Active means runtime metadata changed within the last 30 minutes; older sessions are idle. This measures recency, not whether a terminal process is still online.', runtimeHealth: 'Runtime connectivity', runtimeHealthHint: 'Latest discovery and runtime adapter status.', recentSessions: 'Recent sessions', recentSessionsHint: 'Active sessions first, then lifecycle state and recent activity.', thinking: 'Thinking', toolRunning: 'Using a tool', waitingApproval: 'Waiting for your approval', responding: 'Generating a response', phaseElapsed: '{seconds}s', secondsShort: 's', currentPhaseElapsed: 'Current phase {duration}', totalElapsed: 'Total {duration}', thoughtFor: 'Thought for {duration}', turnMetrics: 'Thought for {thinking} · {total} total', reasoning: 'Reasoning effort', reasoningAuto: 'Auto (model default)', reasoningAutoWithDefault: 'Auto (default: {effort})', reasoningEffort: { none: 'Off', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Maximum', ultra: 'Ultra' }, attachFile: 'Add attachment', send: 'Send', inputHint: 'Ctrl + Enter to send', taskInbox: 'Tasks & inbox', taskDeliveryHint: 'Send and run starts a managed turn in the source session through Runtime Bridge. Saving to inbox alone does not wake the agent.', saveToInbox: 'Save to inbox only', sendAndRun: 'Send and run', turnFailed: 'This run failed ({code}). The message remains visible; retry or check runtime connectivity.',
+      approvalExpired: 'This approval has expired or its run has ended. Start the task again if needed.',
+      approvalRemaining: '{count} more',
+      operationFailed: 'The operation did not complete ({code}). Check runtime connectivity and retry.',
     },
     agentCommands: 'Suggested commands',
     app: {
       title: 'AI-Console',
-      subtitle: 'AI workstation health and quota alerts',
+      subtitle: 'Local AI workstation operations',
       phase: 'Live',
       phaseDescription: 'Live metrics · read-only safety mode',
       heroEyebrow: 'Local-first / read-only status panel',
@@ -217,7 +223,7 @@ const messages = {
     shell: {
       navigation: 'Navigation',
       phase: 'Live Ops',
-      phaseDescription: 'Scheduled collection · read-only monitoring',
+      phaseDescription: 'Continuous monitoring · sessions act with approval',
       topbarEyebrow: 'Command Center',
       topbarHint: 'System is watching ThinkPad, Docker, NAS, and AI quota signals',
       pageHeaderEyebrow: 'AI Ops Console',
@@ -238,7 +244,7 @@ const messages = {
       overview: {
         title: 'Overview',
         description: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
-        liveDescription: 'Latest host, container, quota, and alert status.',
+        liveDescription: 'A live overview of host, containers, AI services, and alerts.',
         kicker: 'Overview',
         intro: 'The global summary entry for the console will eventually hold health, resource, and activity snapshots.',
         sections: {
@@ -252,7 +258,7 @@ const messages = {
       },
       hosts: {
         title: 'Host Monitoring',
-        description: 'Resource usage, live throughput, system information, and top processes.',
+        description: 'Resource usage, system information, throughput trends, and top processes.',
         kicker: 'Host Monitoring',
         intro: 'Reserved for host inventory, health views, and resource curves once node data is connected.',
         sections: {
@@ -266,7 +272,7 @@ const messages = {
       },
       containers: {
         title: 'Container Services',
-        description: 'Container runtime, health checks, port mappings, and uptime.',
+        description: 'Runtime status, health checks, port mappings, and uptime.',
         kicker: 'Container Services',
         intro: 'Reserved for service lists, running instances, and deployment state once orchestration data is available.',
         sections: {
@@ -280,7 +286,7 @@ const messages = {
       },
       agents: {
         title: 'Agents',
-        description: 'Review Hermes and Codex history, continue live sessions with inherited permissions, and manage their lifecycle.',
+        description: 'Monitor agent status and continue Hermes or Codex sessions.',
         kicker: 'Agents',
         intro: 'Review live history, continue conversations, and manage archives, approvals, and task delivery.',
         sections: {
@@ -298,7 +304,7 @@ const messages = {
       },
       aiServices: {
         title: 'AI Services',
-        description: 'CPA and Codex quota usage, account status, and reset time.',
+        description: 'Account availability, quota usage, and reset times.',
         kicker: 'AI Services',
         intro: 'Reserved for model providers, routing rules, and usage information once service data is connected.',
         sections: {
@@ -312,7 +318,7 @@ const messages = {
       },
       networkStorage: {
         title: 'Network & Storage',
-        description: 'Storage capacity, mount health, and live network throughput.',
+        description: 'Storage capacity, network throughput, firewall rules, and listening ports.',
         kicker: 'Network & Storage',
         intro: 'Reserved for topology, mounted storage, and capacity information once the data layer is in place.',
         sections: {
@@ -326,7 +332,7 @@ const messages = {
       },
       alerts: {
         title: 'Alert Records',
-        description: 'Active alerts, first seen time, occurrences, and recovery history.',
+        description: 'Current issues, occurrence counts, and recent recoveries.',
         kicker: 'Alert Records',
         intro: 'Reserved for events, notifications, and response workflows once alert feeds are connected.',
         sections: {

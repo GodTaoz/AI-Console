@@ -374,6 +374,7 @@ class AgentTurnStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(default="", max_length=20_000)
     model: str | None = Field(default=None, max_length=200)
+    reasoning_effort: str | None = Field(default=None, pattern=r"^(none|minimal|low|medium|high|xhigh|max|ultra)$")
     attachments: list[AgentAttachment] = Field(default_factory=list, max_length=5)
 
     @model_validator(mode="after")
@@ -390,6 +391,13 @@ class AgentTurnStartResponse(BaseModel):
     run_id: str
     session_id: str
     status: str
+
+
+class AgentTurnStatusResponse(BaseModel):
+    run_id: str
+    session_id: str
+    status: str
+    error_code: str | None = None
 
 
 class AgentApprovalRequest(BaseModel):
@@ -436,6 +444,8 @@ class AgentModelOption(BaseModel):
     supports_images: bool = False
     is_current: bool = False
     is_default: bool = False
+    reasoning_efforts: list[str] = Field(default_factory=list)
+    default_reasoning_effort: str | None = None
 
 
 class AgentModelListResponse(BaseModel):

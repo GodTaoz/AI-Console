@@ -90,6 +90,7 @@ class AgentRuntimeBridgeClient:
         external_session_id: str,
         text: str,
         model: str | None = None,
+        reasoning_effort: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         return await self._request("POST", "/v1/turns", json={
@@ -97,6 +98,7 @@ class AgentRuntimeBridgeClient:
             "external_session_id": external_session_id,
             "text": text,
             "model": model,
+            "reasoning_effort": reasoning_effort,
             "attachments": attachments or [],
         })
 

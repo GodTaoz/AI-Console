@@ -2,7 +2,7 @@ export const uiMessages = {
   'zh-CN': {
     status: { ok: '正常', warning: '警告', critical: '严重', unsupported: '不支持', permission_denied: '无权限', unknown: '未知' },
     common: { refresh: '刷新', collectNow: '立即采集', collectedAt: '采集时间', notCollected: '尚未采集', noData: '暂无数据', items: '项', status: '状态', loadFailed: '数据加载失败', last24Hours: '最近 24 小时' },
-    header: { title: '运行监控', hint: '查看主机、容器和额度的最新状态', menu: '显示或隐藏导航', theme: '切换主题', language: '选择语言' },
+    header: { menu: '显示或隐藏导航', theme: '切换主题', language: '选择语言' },
     footer: { product: 'AI-Console', description: '单机自托管 AI 工作站健康与额度预警中心', mode: '只读模式' },
     overviewUi: {
       allOk: '所有核心监控项运行正常', hasIssues: '存在需要处理的监控事件', coreContainers: '核心容器', quotaAccounts: '额度账号', activeIssues: '活动问题', dataState: '数据状态', fresh: '最新', stale: '已过期',
@@ -22,7 +22,7 @@ export const uiMessages = {
   'en-US': {
     status: { ok: 'Healthy', warning: 'Warning', critical: 'Critical', unsupported: 'Unsupported', permission_denied: 'Permission denied', unknown: 'Unknown' },
     common: { refresh: 'Refresh', collectNow: 'Collect now', collectedAt: 'Collected', notCollected: 'Not collected', noData: 'No data', items: 'items', status: 'Status', loadFailed: 'Failed to load data', last24Hours: 'Last 24 hours' },
-    header: { title: 'Operations', hint: 'Monitor host, container, and quota status', menu: 'Show or hide navigation', theme: 'Toggle theme', language: 'Choose language' },
+    header: { menu: 'Show or hide navigation', theme: 'Toggle theme', language: 'Choose language' },
     footer: { product: 'AI-Console', description: 'Health and quota alerts for a self-hosted AI workstation', mode: 'Read-only' },
     overviewUi: {
       allOk: 'All core monitors are healthy', hasIssues: 'Monitoring events require attention', coreContainers: 'Core containers', quotaAccounts: 'Quota accounts', activeIssues: 'Active issues', dataState: 'Data status', fresh: 'Fresh', stale: 'Stale',

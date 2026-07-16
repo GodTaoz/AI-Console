@@ -34,6 +34,7 @@ class SearchRequest(SessionRequest):
 class TurnRequest(SessionRequest):
     text: str = Field(default="", max_length=20_000)
     model: str | None = Field(default=None, max_length=200)
+    reasoning_effort: str | None = Field(default=None, pattern=r"^(none|minimal|low|medium|high|xhigh|max|ultra)$")
     attachments: list[BridgeAttachment] = Field(default_factory=list, max_length=5)
 
 
@@ -75,6 +76,11 @@ class RuntimeManager:
         except KeyError as exc:
             raise AdapterError("Runtime is not supported", code="unsupported_runtime") from exc
 
+    async def emit_event(self, state: RunState, event: dict[str, Any]) -> None:
+        async with state.condition:
+            state.events.append({"sequence": len(state.events) + 1, **event})
+            state.condition.notify_all()
+
     async def start_turn(self, request: TurnRequest) -> RunState:
         key = (request.runtime, request.external_session_id)
         existing = self.active_sessions.get(key)
@@ -86,9 +92,7 @@ class RuntimeManager:
         self.active_sessions[key] = run_id
 
         async def emit(event: dict[str, Any]) -> None:
-            async with state.condition:
-                state.events.append({"sequence": len(state.events) + 1, **event})
-                state.condition.notify_all()
+            await self.emit_event(state, event)
 
         async def run() -> None:
             try:
@@ -98,6 +102,7 @@ class RuntimeManager:
                     request.text,
                     emit,
                     model=request.model,
+                    reasoning_effort=request.reasoning_effort,
                     attachments=[item.model_dump() for item in request.attachments],
                 )
                 state.status = "completed"
@@ -226,6 +231,11 @@ def create_bridge_app(*, manager: RuntimeManager | None = None, token: str | Non
         try:
             adapter = runtime_manager.adapter(state.handle.runtime)
             await adapter.approve(state.handle, approval_id, request.decision)  # type: ignore[attr-defined]
+            await runtime_manager.emit_event(state, {
+                "type": "approval_resolved",
+                "approval_id": approval_id,
+                "decision": request.decision,
+            })
         except AdapterError as exc:
             raise runtime_error(exc) from None
         return {"run_id": run_id, "approval_id": approval_id, "decision": request.decision}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NConfigProvider, NGlobalStyle, darkTheme, enUS, zhCN } from 'naive-ui'
+import { NConfigProvider, NGlobalStyle, NNotificationProvider, darkTheme, enUS, zhCN } from 'naive-ui'
 
 import AppShell from '@/components/layout/AppShell.vue'
 import RouterView from '@/router/RouterView.vue'
@@ -31,8 +31,10 @@ watch(
 <template>
   <n-config-provider :locale="naiveLocale" :theme="configTheme" :theme-overrides="themeOverrides">
     <NGlobalStyle />
-    <AppShell>
-      <RouterView />
-    </AppShell>
+    <NNotificationProvider placement="top-right" :max="4">
+      <AppShell>
+        <RouterView />
+      </AppShell>
+    </NNotificationProvider>
   </n-config-provider>
 </template>

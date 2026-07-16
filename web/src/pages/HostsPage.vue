@@ -7,6 +7,7 @@ import { filesystemUsedPercent, formatBytes, formatBytesPerSecond, formatPercent
 import DataPanel from '@/components/data/DataPanel.vue'
 import MetricChart, { type ChartSeries } from '@/components/data/MetricChart.vue'
 import PageToolbar from '@/components/data/PageToolbar.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
 import { useConsoleFormatters } from '@/composables/useConsoleFormatters'
 import type { MetricHistoryResponse, ProcessSnapshot, ResourcesResponse } from '@/types'
 
@@ -84,7 +85,9 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateDescriptionColu
 
 <template>
   <section class="ops-page">
-    <PageToolbar :status="resources?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadResources" />
+    <PageHeader :title="t('pages.hosts.title')" :description="t('pages.hosts.description')">
+      <template #actions><PageToolbar :status="resources?.status" :updated-at="updatedAt" :loading="loading" @refresh="loadResources" /></template>
+    </PageHeader>
     <NAlert v-if="error" type="error" :title="t('common.loadFailed')">{{ error }}</NAlert>
 
     <div class="dashboard-grid dashboard-grid--four">

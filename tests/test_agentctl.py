@@ -1,7 +1,8 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 from qingluo_console.agent_registry.cli import AgentCtlError, main
-from qingluo_console.agent_registry.discovery import HermesSessionEntry
+from qingluo_console.agent_registry.discovery import CodexSessionIndexEntry, HermesSessionEntry
 
 
 class FakeClient:
@@ -109,6 +110,41 @@ def test_agentctl_bootstrap_local_registers_safe_discovered_metadata(tmp_path, c
     assert report_call[2]["result"] == "ok"
     assert report_call[2]["discovered_count"] == 1
     assert "Registered 1 local Codex session" in capsys.readouterr().out
+
+
+def test_agentctl_bootstrap_discovers_recent_codex_threads_from_app_server(monkeypatch, capsys):
+    recent_timestamp = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    stale_timestamp = (datetime.now(UTC) - timedelta(days=2)).isoformat()
+    monkeypatch.setattr(
+        "qingluo_console.agent_registry.cli.load_codex_app_server_sessions",
+        lambda limit: [
+            CodexSessionIndexEntry("new-session", "Codex new", recent_timestamp),
+            CodexSessionIndexEntry("older-session", "Older work", stale_timestamp),
+        ],
+    )
+    client = FakeClient()
+
+    assert main([
+        "bootstrap-local",
+        "--codex-source", "app-server",
+        "--codex-limit", "20",
+        "--all",
+        "--no-reconcile",
+    ], client=client) == 0
+
+    session_calls = [call for call in client.calls if call[1].startswith("/api/v1/agent-sessions/codex-")]
+    assert len(session_calls) == 2
+    assert session_calls[0][2]["status"] == "active"
+    assert session_calls[1][2]["status"] == "idle"
+    assert session_calls[0][2]["metadata"] == {
+        "thread_name": "Codex new",
+        "runtime_updated_at": recent_timestamp,
+        "source": "codex-app-server",
+    }
+    report = next(call for call in client.calls if call[1] == "/api/v1/agent-discovery/codex-local")
+    assert report[2]["source_type"] == "codex_app_server"
+    assert report[2]["discovered_count"] == 2
+    assert "Registered 2 local Codex sessions" in capsys.readouterr().out
 
 
 def test_agentctl_discover_hermes_registers_safe_sessions(monkeypatch, capsys):

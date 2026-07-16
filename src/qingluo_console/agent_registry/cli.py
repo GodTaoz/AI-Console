@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -16,6 +17,7 @@ from qingluo_console.agent_registry.discovery import (
     CodexSessionIndexEntry,
     HermesSessionEntry,
     default_codex_session_index,
+    load_codex_app_server_sessions,
     load_codex_session_index,
     load_hermes_sessions,
     select_codex_sessions,
@@ -117,14 +119,21 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap = commands.add_parser(
         "bootstrap-local",
         aliases=["discover"],
-        help="discover and register local Codex sessions from session_index.jsonl",
+        help="discover and register safe local Codex session metadata",
     )
     bootstrap.add_argument("--session-index", default=os.getenv("QINGLUO_CODEX_SESSION_INDEX", str(default_codex_session_index())))
+    bootstrap.add_argument(
+        "--codex-source",
+        choices=["index", "app-server", "auto"],
+        default=os.getenv("QINGLUO_CODEX_DISCOVERY_SOURCE", "index"),
+        help="Codex metadata source; auto falls back to session_index.jsonl",
+    )
+    bootstrap.add_argument("--codex-limit", type=int, default=20, help="maximum Codex sessions to inspect")
     bootstrap.add_argument("--thread-name", default=os.getenv("QINGLUO_AGENT_THREAD_NAME"))
     bootstrap.add_argument("--external-session-id")
     bootstrap.add_argument("--all", action="store_true", dest="include_all")
     bootstrap.add_argument("--purpose", default=os.getenv("QINGLUO_AGENT_SESSION_PURPOSE"))
-    bootstrap.add_argument("--status", choices=["active", "idle", "waiting"], default="active")
+    bootstrap.add_argument("--status", choices=["auto", "active", "idle", "waiting"], default="auto")
     bootstrap.add_argument("--watch", action="store_true", help="refresh discovery continuously until interrupted")
     bootstrap.add_argument("--interval", type=float, default=60.0, help="discovery interval in seconds")
     bootstrap.add_argument("--proc-root", default="/proc")
@@ -281,8 +290,27 @@ def _registration_payload(args: argparse.Namespace) -> tuple[str, dict[str, Any]
     return session_id, payload
 
 
-def _codex_discovery_payload(entry: CodexSessionIndexEntry, args: argparse.Namespace) -> tuple[str, dict[str, Any]]:
+def _codex_discovery_payload(
+    entry: CodexSessionIndexEntry,
+    args: argparse.Namespace,
+    *,
+    source_type: str = "codex_session_index",
+) -> tuple[str, dict[str, Any]]:
     session_id = _derived_session_id("codex", entry.session_id)
+    status = args.status
+    if status == "auto":
+        status = "active"
+        if source_type == "codex_app_server":
+            try:
+                updated_at = datetime.fromisoformat(entry.updated_at.replace("Z", "+00:00"))
+                status = "active" if datetime.now(UTC) - updated_at <= timedelta(minutes=30) else "idle"
+            except ValueError:
+                status = "idle"
+    metadata = {"thread_name": entry.thread_name}
+    if source_type == "codex_app_server":
+        metadata.update({"runtime_updated_at": entry.updated_at, "source": "codex-app-server"})
+    else:
+        metadata["index_updated_at"] = entry.updated_at
     return session_id, {
         "agent": {
             "agent_id": "codex-local",
@@ -295,14 +323,11 @@ def _codex_discovery_payload(entry: CodexSessionIndexEntry, args: argparse.Names
         "parent_session_id": None,
         "kind": "interactive",
         "purpose": args.purpose or f"Codex session: {entry.thread_name}",
-        "status": args.status,
+        "status": status,
         "registration_source": "discovered",
         "workspace_id": None,
         "entry": {"type": "codex_session", "data": {"session_id": entry.session_id}},
-        "metadata": {
-            "thread_name": entry.thread_name,
-            "index_updated_at": entry.updated_at,
-        },
+        "metadata": metadata,
     }
 
 
@@ -398,21 +423,37 @@ def _discover_hermes(
 
 
 def _bootstrap_local(registry: AgentRegistryClient | Any, args: argparse.Namespace) -> list[dict[str, Any]]:
-    try:
-        entries = load_codex_session_index(args.session_index)
-    except ValueError as exc:
-        raise AgentCtlError(str(exc)) from None
+    if args.codex_limit < 1 or args.codex_limit > 100:
+        raise AgentCtlError("--codex-limit must be between 1 and 100")
+    source_type = "codex_session_index"
+    if args.codex_source in {"app-server", "auto"}:
+        try:
+            entries = load_codex_app_server_sessions(args.codex_limit)
+            source_type = "codex_app_server"
+        except ValueError as exc:
+            if args.codex_source == "app-server":
+                raise AgentCtlError(str(exc)) from None
+            entries = []
+    else:
+        entries = []
+    if not entries:
+        try:
+            entries = load_codex_session_index(args.session_index)
+        except ValueError as exc:
+            raise AgentCtlError(str(exc)) from None
+        source_type = "codex_session_index"
     selected = select_codex_sessions(
         entries,
         thread_name=args.thread_name,
         external_session_id=args.external_session_id,
         include_all=args.include_all,
     )
+    selected = selected[:args.codex_limit]
     if not selected:
         raise AgentCtlError("no matching Codex sessions were found")
     results = []
     for entry in selected:
-        session_id, payload = _codex_discovery_payload(entry, args)
+        session_id, payload = _codex_discovery_payload(entry, args, source_type=source_type)
         results.append(registry.request("PUT", f"/api/v1/agent-sessions/{session_id}", payload))
     if not args.no_reconcile:
         _reconcile_local(registry, proc_root=args.proc_root)
@@ -420,7 +461,7 @@ def _bootstrap_local(registry: AgentRegistryClient | Any, args: argparse.Namespa
         "PUT",
         "/api/v1/agent-discovery/codex-local",
         {
-            "source_type": "codex_session_index",
+            "source_type": source_type,
             "result": "ok",
             "interval_seconds": max(5, round(args.interval)),
             "discovered_count": len(results),
@@ -576,7 +617,7 @@ def main(
                             "PUT",
                             "/api/v1/agent-discovery/codex-local",
                             {
-                                "source_type": "codex_session_index",
+                            "source_type": "codex_app_server" if args.codex_source in {"app-server", "auto"} else "codex_session_index",
                                 "result": "error",
                                 "interval_seconds": max(5, round(args.interval)),
                                 "discovered_count": 0,

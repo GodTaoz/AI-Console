@@ -14,6 +14,16 @@ from typing import Any
 
 EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
+CODEX_ENV_ALLOWLIST = {
+    "HOME",
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+    "CODEX_HOME",
+    "CPA_API_KEY",
+}
+
 
 class AdapterError(RuntimeError):
     def __init__(self, message: str, *, code: str = "runtime_error"):
@@ -103,7 +113,7 @@ class CodexRpcClient:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
-            env={key: value for key, value in os.environ.items() if key in {"HOME", "PATH", "LANG", "LC_ALL", "TERM", "CODEX_HOME"}},
+            env={key: value for key, value in os.environ.items() if key in CODEX_ENV_ALLOWLIST},
             limit=16 * 1024 * 1024,
         )
         self.reader_task = asyncio.create_task(self._read())
@@ -187,6 +197,7 @@ class RuntimeAdapter:
         emit: EventCallback,
         *,
         model: str | None = None,
+        reasoning_effort: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
     ) -> None:
         raise NotImplementedError
@@ -250,6 +261,7 @@ class CodexAdapter(RuntimeAdapter):
         emit: EventCallback,
         *,
         model: str | None = None,
+        reasoning_effort: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
     ) -> None:
         client = CodexRpcClient()
@@ -301,9 +313,12 @@ class CodexAdapter(RuntimeAdapter):
                         inputs.append({"type": "localImage", "path": str(target)})
                     else:
                         inputs.append({"type": "mention", "name": name, "path": str(target)})
+                await client.request("thread/resume", {"threadId": external_session_id})
                 params: dict[str, Any] = {"threadId": external_session_id, "input": inputs}
                 if model:
                     params["model"] = model
+                if reasoning_effort:
+                    params["effort"] = reasoning_effort
                 result = await client.request("turn/start", params)
                 handle.runtime_turn_id = str((result or {}).get("turn", {}).get("id") or "")
                 await emit({"type": "started"})
@@ -346,6 +361,12 @@ class CodexAdapter(RuntimeAdapter):
                 "supports_images": "image" in (item.get("inputModalities") or []),
                 "is_current": bool(item.get("isDefault")),
                 "is_default": bool(item.get("isDefault")),
+                "reasoning_efforts": [
+                    str(effort.get("reasoningEffort"))
+                    for effort in (item.get("supportedReasoningEfforts") or [])
+                    if effort.get("reasoningEffort")
+                ],
+                "default_reasoning_effort": item.get("defaultReasoningEffort"),
             }
             for item in (result or {}).get("data", [])
             if not item.get("hidden")
@@ -457,6 +478,7 @@ class HermesAdapter(RuntimeAdapter):
         emit: EventCallback,
         *,
         model: str | None = None,
+        reasoning_effort: str | None = None,
         attachments: list[dict[str, Any]] | None = None,
     ) -> None:
         client = HermesRpcClient(self.agent_home)

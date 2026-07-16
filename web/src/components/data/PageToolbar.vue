@@ -21,7 +21,7 @@ const { dateTime } = useConsoleFormatters()
       <span>{{ t('common.collectedAt') }} {{ dateTime(updatedAt) }}</span>
       <slot />
     </div>
-    <NButton :loading="loading" type="primary" @click="$emit('refresh')">
+    <NButton :loading="loading" secondary @click="$emit('refresh')">
       {{ collect ? t('common.collectNow') : t('common.refresh') }}
     </NButton>
   </div>
